@@ -1,0 +1,11 @@
+# Normalise text to LF so diffs of reports/conventions are identical on every OS.
+* text=auto eol=lf
+# Maya ASCII is text (diffable), but must not be re-encoded.
+*.ma  text eol=lf
+# Binary DCC / image formats: never touch line endings.
+*.mb  binary
+*.fbx binary
+*.png binary
+*.tga binary
+*.psd binary
+*.exr binary

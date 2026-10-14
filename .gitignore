@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Pipeline outputs: reports and fixed files are build artefacts, never source.
+out/
+*.report.json
+
+# Maya side files
+incrementalSave/
+*.swatches
+*.ma.bak
+*.mb.bak
+
+# Editor
+.vscode/

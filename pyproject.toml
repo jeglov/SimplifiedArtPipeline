@@ -1,0 +1,14 @@
+# artpipe is not pip-installed: it is run from the repo root so that
+# `mayapy -m validate.maya.cli ...` resolves the package without touching
+# Maya's site-packages. This file only configures tooling.
+[project]
+name = "artpipe"
+version = "0.1.0"
+description = "Agent-runnable art validation pipeline (Maya -> Unity) for mobile games."
+requires-python = ">=3.9"  # Maya 2023 ships Python 3.9.7 - keep code 3.9-compatible.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Put the repo root on sys.path so `import validate` works no matter
+# which interpreter (system Python or mayapy) launches pytest.
+pythonpath = ["."]
