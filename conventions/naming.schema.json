@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/artpipe/artpipe/conventions/naming.schema.json",
+  "title": "artpipe naming conventions",
+  "description": "Validates an asset manifest (the names inside one exported asset). Each $defs entry is also used directly by the validator's naming check. Grammar: <Type>_<AssetName>[_<Variant>][_LOD<n>]. AssetName is PascalCase with no underscores, so names always split unambiguously on '_'.",
+  "$comment": "Patterns use the subset shared by ECMA-262 (JSON Schema validators) and Python re: no lookbehind, no named groups, no inline flags. Python code must use re.fullmatch(), because '$' in Python also matches before a trailing newline. Examples under 'examples' must match; 'x-invalid-examples' must not. tests/test_conventions.py enforces both.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mesh_file", "mesh_nodes"],
+  "properties": {
+    "mesh_file":   { "$ref": "#/$defs/mesh_file" },
+    "group_node":  { "$ref": "#/$defs/group_node" },
+    "mesh_nodes":  { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/mesh_node" } },
+    "materials":   { "type": "array", "items": { "$ref": "#/$defs/material" } },
+    "textures":    { "type": "array", "items": { "$ref": "#/$defs/texture_file" } }
+  },
+
+  "$defs": {
+    "mesh_file": {
+      "description": "Exported model file. SM_ = static mesh, SK_ = skinned mesh. Optional variant: one capital letter or two digits.",
+      "type": "string",
+      "pattern": "^(SM|SK)_[A-Z][A-Za-z0-9]{1,31}(_([A-Z]|[0-9]{2}))?\\.fbx$",
+      "examples": ["SM_Crate.fbx", "SM_Crate_A.fbx", "SK_Runner_01.fbx"],
+      "x-invalid-examples": ["sm_crate.fbx", "SM_crate.fbx", "SM_Crate_A_LOD0.fbx", "SM_Wooden_Crate.fbx", "SM_Crate.FBX", "SM_Crate.obj"]
+    },
+    "group_node": {
+      "description": "Optional single root group in the Maya scene. Must equal the file name without extension.",
+      "type": "string",
+      "pattern": "^(SM|SK)_[A-Z][A-Za-z0-9]{1,31}(_([A-Z]|[0-9]{2}))?$",
+      "examples": ["SM_Crate", "SM_Crate_A", "SK_Runner_01"],
+      "x-invalid-examples": ["group1", "SM_Crate_LOD0", "SM_Crate_a"]
+    },
+    "mesh_node": {
+      "description": "Mesh transform. _LOD<n> (0-3) is required when the asset has more than one LOD and omitted otherwise. Unity's model importer builds a LODGroup automatically from _LOD0.._LODn suffixes.",
+      "type": "string",
+      "pattern": "^(SM|SK)_[A-Z][A-Za-z0-9]{1,31}(_([A-Z]|[0-9]{2}))?(_LOD[0-3])?$",
+      "examples": ["SM_Crate", "SM_Crate_A_LOD0", "SM_Crate_A_LOD2", "SK_Runner_01_LOD1"],
+      "x-invalid-examples": ["pCube1", "SM_Crate_LOD4", "SM_Crate_lod0", "SM_Crate__A", "SM_Crate_ABC", "SM_Crate_A_LOD0 "]
+    },
+    "material": {
+      "description": "Material name. Shared atlas materials across many assets are encouraged on mobile (fewer draw calls, better batching).",
+      "type": "string",
+      "pattern": "^M_[A-Z][A-Za-z0-9]{1,31}(_([A-Z]|[0-9]{2}))?$",
+      "examples": ["M_Crate", "M_PropsAtlas", "M_Runner_01"],
+      "x-invalid-examples": ["lambert1", "MAT_Crate", "M_crate", "M_Crate_Wood"]
+    },
+    "texture_file": {
+      "description": "Texture file. Suffix = map type, defined in texture_rules.yaml (D base color, N normal, MS metallic/smoothness, AO occlusion, E emission).",
+      "type": "string",
+      "pattern": "^T_[A-Z][A-Za-z0-9]{1,31}(_([A-Z]|[0-9]{2}))?_(D|N|MS|AO|E)\\.(png|tga)$",
+      "examples": ["T_Crate_D.png", "T_Crate_A_N.png", "T_PropsAtlas_MS.tga"],
+      "x-invalid-examples": ["T_Crate.png", "T_Crate_Diffuse.png", "T_Crate_D.jpg", "T_Crate_D.psd", "Crate_D.png", "T_Crate_d.png"]
+    }
+  }
+}

@@ -1,0 +1,73 @@
+# artpipe texture rules. Validated in Phase 1 (names, sizes) and consumed by
+# Unity import presets in Phase 2 (import_hints).
+#
+# Target render pipeline: Unity URP, Lit or custom unlit/toon shaders.
+
+version: 1
+
+# Source formats allowed in the repo. PSD is excluded: multi-hundred-MB
+# layered files bloat the Unity project and import slowly. Export flattened
+# PNG/TGA from Photoshop/Substance. JPG is excluded: lossy before lossy GPU
+# compression double-degrades the image.
+source_formats: [png, tga]
+
+# POT (power-of-two) sizes: ASTC can compress NPOT, but POT still gives
+# full mip chains, predictable memory and atlas packing.
+power_of_two: true
+square_required: false
+min_size: 32
+
+# Max texture dimension (px) per asset class. Keys must match the classes in
+# mesh_budgets.yaml (the loader checks this). `default` applies to unknown
+# future classes.
+max_size_by_class:
+  default: 512
+  pickup: 128
+  prop_small: 256
+  prop_medium: 512
+  prop_hero: 1024
+  character: 1024
+  crowd_unit: 256
+  vehicle: 1024
+  env_module: 1024
+
+# Map types. The keys are the filename suffixes in naming.schema.json.
+types:
+  D:
+    description: Base color (albedo).
+    color_space: srgb
+    channels: {rgb: base_color, a: opacity}
+    alpha: optional        # only when the material is cutout/transparent
+  N:
+    description: Tangent-space normal map.
+    color_space: linear
+    channels: {rgb: normal}
+    alpha: forbidden
+    # Unity uses OpenGL convention (green = Y+). Unreal uses DirectX (Y-).
+    # Exporting from Substance with the Unreal preset gives inverted lighting.
+    normal_convention: opengl
+  MS:
+    description: URP Lit metallic map (metallic in R, smoothness in A).
+    color_space: linear
+    channels: {r: metallic, a: smoothness}
+    alpha: required
+  AO:
+    description: Ambient occlusion (separate map in URP Lit).
+    color_space: linear
+    channels: {r: occlusion}
+    alpha: forbidden
+  E:
+    description: Emission.
+    color_space: srgb
+    channels: {rgb: emission}
+    alpha: forbidden
+
+# Consumed by the Phase 2 Unity TexturePostprocessor/presets. Not validated
+# in Phase 1 (see docs/backlog.md #14).
+import_hints:
+  mipmaps: true
+  android: {format: ASTC_6x6}
+  ios: {format: ASTC_6x6}
+  # Normal maps show block artefacts at 6x6, so use a finer block size.
+  overrides:
+    N: {android: {format: ASTC_4x4}, ios: {format: ASTC_4x4}}

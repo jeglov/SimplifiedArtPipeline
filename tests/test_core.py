@@ -140,7 +140,7 @@ def test_core_never_imports_maya():
     """validate.core must stay importable without Maya (fresh interpreter,
     so modules imported by pytest itself can't mask a violation)."""
     code = (
-        "import sys, validate.core.result; "
+        "import sys, validate.core.result, validate.core.naming, validate.core.conventions; "
         "bad = [m for m in sys.modules if m == 'maya' or m.startswith('maya.')]; "
         "assert not bad, bad"
     )
