@@ -72,6 +72,8 @@ installed Maya.
 | `artpipe fixtures [DIR]` | build the deliberately broken test scenes |
 | `artpipe test [-m "not maya"]` | full suite, or the pure-Python core only (<1 s, no Maya needed) |
 | `artpipe docs [--check]` | regenerate the tables in `docs/conventions.md` |
+| `artpipe conventions --dump\|--check` | write / verify `conventions/conventions.lock.json`, the resolved rules Unity reads |
+| `artpipe unity setup\|import\|test` | run the Unity project headless (Phase 2, in progress) |
 
 ## Layout
 

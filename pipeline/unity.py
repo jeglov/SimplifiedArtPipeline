@@ -83,6 +83,25 @@ def find_unity(env: Mapping[str, str] = os.environ, project: Path = PROJECT) -> 
     return exe
 
 
+def project_locked(project: Path = PROJECT, opener=open) -> bool:
+    """True if a Unity Editor has the project open right now.
+
+    Probed on Windows: a running Editor holds Temp/UnityLockfile open
+    exclusively, so even reading it fails with PermissionError. A lockfile
+    left behind by a crashed Editor opens fine, so it isn't a false positive.
+    Checked before launching because Unity 6000.5 in batchmode exits 1 on a
+    locked project without saying why in its log.
+    """
+    lockfile = project / "Temp" / "UnityLockfile"
+    if not lockfile.is_file():
+        return False
+    try:
+        opener(str(lockfile), "rb").close()
+    except PermissionError:
+        return True
+    return False
+
+
 def base_command(unity: Path, log: Path) -> List[str]:
     return [str(unity), "-batchmode", "-nographics",
             "-projectPath", str(PROJECT),
@@ -206,6 +225,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     try:
         unity = find_unity()
+        if project_locked():
+            raise ToolError("a Unity Editor has %s open. Close it and retry (only one Unity "
+                            "may open a project at a time)" % rel(PROJECT))
         code, message = {"setup": cmd_setup, "import": cmd_import, "test": cmd_test}[args.command](unity, args)
     except ToolError as exc:
         code, message = EXIT_TOOL_ERROR, str(exc)

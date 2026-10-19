@@ -33,6 +33,11 @@ DEFAULT_DIR = Path(__file__).resolve().parents[2] / "conventions"
 SUPPORTED_VERSION = 1
 PIVOT_MODES = ("bottom_center", "center", "origin")
 MESH_TYPES = ("SM", "SK")
+# Unity build targets the texture import hints may name, and the GPU formats
+# they may ask for. ASTC block size = pixels per 128-bit block: 4x4 is
+# 8 bits/pixel (finest), 6x6 3.56 bpp, 8x8 2 bpp, 12x12 0.89 bpp.
+TEXTURE_PLATFORMS = ("android", "ios")
+TEXTURE_FORMATS = ("ASTC_4x4", "ASTC_5x5", "ASTC_6x6", "ASTC_8x8", "ASTC_10x10", "ASTC_12x12")
 _CHECK_ID = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 
 
@@ -94,6 +99,9 @@ class TextureType:
     color_space: str
     alpha: str
     channels: Tuple[Tuple[str, str], ...]
+    # GPU format per platform for this map type: import_hints defaults with
+    # the type's override already applied, e.g. (("android", "ASTC_4x4"), ...).
+    formats: Tuple[Tuple[str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -103,7 +111,7 @@ class TextureRules:
     square_required: bool
     min_size: int
     types: Tuple[TextureType, ...]
-    import_hints: Mapping[str, Any]  # opaque until Phase 2
+    mipmaps: bool
 
 
 @dataclass(frozen=True)
@@ -250,6 +258,45 @@ def _is_pot(n: int) -> bool:
     return n > 0 and (n & (n - 1)) == 0
 
 
+def _parse_formats(raw: Dict[str, Any], where: str) -> Dict[str, str]:
+    """{platform: {format: X}} -> {platform: X}, validated."""
+    if not isinstance(raw, dict):
+        raise ConventionError("%s: expected a mapping" % where)
+    out = {}
+    for platform, spec in sorted(raw.items()):
+        if platform not in TEXTURE_PLATFORMS:
+            raise ConventionError("%s.%s: unknown platform, expected one of %s"
+                                  % (where, platform, TEXTURE_PLATFORMS))
+        pr = _Reader(spec, "%s.%s" % (where, platform))
+        fmt = pr.get("format", str)
+        pr.done()
+        if fmt not in TEXTURE_FORMATS:
+            raise ConventionError("%s.%s.format: %r is not one of %s"
+                                  % (where, platform, fmt, TEXTURE_FORMATS))
+        out[platform] = fmt
+    return out
+
+
+def _parse_import_hints(raw: Dict[str, Any], suffixes: Tuple[str, ...]
+                        ) -> Tuple[bool, Dict[str, Dict[str, str]]]:
+    """(mipmaps, {suffix: {platform: format}}) with overrides resolved."""
+    where = "texture_rules.import_hints"
+    hr = _Reader(raw, where)
+    mipmaps = hr.get("mipmaps", bool)
+    defaults = _parse_formats({p: hr.get(p, dict) for p in TEXTURE_PLATFORMS}, where)
+    overrides = hr.get("overrides", dict, required=False, default={})
+    hr.done()
+    unknown = sorted(set(overrides) - set(suffixes))
+    if unknown:
+        raise ConventionError("%s.overrides: unknown map type(s) %s" % (where, unknown))
+    resolved = {}
+    for suffix in suffixes:
+        formats = dict(defaults)
+        formats.update(_parse_formats(overrides.get(suffix) or {}, "%s.overrides.%s" % (where, suffix)))
+        resolved[suffix] = formats
+    return mipmaps, resolved
+
+
 def _parse_textures(data: Dict[str, Any]) -> Tuple[TextureRules, Dict[str, int]]:
     r = _Reader(data, "texture_rules")
     r.get("version", int)
@@ -260,8 +307,10 @@ def _parse_textures(data: Dict[str, Any]) -> Tuple[TextureRules, Dict[str, int]]
         if not isinstance(v, int) or isinstance(v, bool) or not _is_pot(v):
             raise ConventionError("texture_rules.max_size_by_class.%s: must be a power of two" % k)
 
+    raw_types = r.get("types", dict)
+    mipmaps, formats = _parse_import_hints(r.get("import_hints", dict), tuple(sorted(raw_types)))
     types = []
-    for suffix, raw in sorted(r.get("types", dict).items()):
+    for suffix, raw in sorted(raw_types.items()):
         tr = _Reader(raw, "texture_rules.types.%s" % suffix)
         tt = TextureType(
             suffix=suffix,
@@ -269,6 +318,7 @@ def _parse_textures(data: Dict[str, Any]) -> Tuple[TextureRules, Dict[str, int]]
             color_space=tr.get("color_space", str),
             alpha=tr.get("alpha", str),
             channels=tuple(sorted(tr.get("channels", dict).items())),
+            formats=tuple(sorted(formats[suffix].items())),
         )
         tr.get("normal_convention", str, required=False)  # informational
         tr.done()
@@ -284,7 +334,7 @@ def _parse_textures(data: Dict[str, Any]) -> Tuple[TextureRules, Dict[str, int]]
         square_required=r.get("square_required", bool),
         min_size=r.get("min_size", int),
         types=tuple(types),
-        import_hints=r.get("import_hints", dict, required=False, default={}),
+        mipmaps=mipmaps,
     )
     r.done()
     return rules, sizes

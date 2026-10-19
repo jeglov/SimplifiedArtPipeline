@@ -1,0 +1,461 @@
+{
+  "classes": {
+    "character": {
+      "description": "Player / boss character. 1-3 on screen.",
+      "lods": {
+        "max": 3,
+        "max_ratio": [
+          1.0,
+          0.5,
+          0.25,
+          0.125
+        ],
+        "min": 1,
+        "tolerance": 0.1
+      },
+      "max_materials": 2,
+      "mesh_types": [
+        "SK"
+      ],
+      "pivot": {
+        "mode": "bottom_center",
+        "tolerance_cm": 0.5
+      },
+      "severity_overrides": {},
+      "size_cm": {
+        "max": 300.0,
+        "min": 50.0
+      },
+      "texture_max_size": 1024,
+      "tris_max": 5000,
+      "uv": {
+        "overlap_allowed": true,
+        "required_sets": [
+          "map1"
+        ],
+        "unit_square": true
+      }
+    },
+    "crowd_unit": {
+      "description": "Crowd / army member (runner and crowd games). 50-200 on screen, so the budget is tiny and 1 material is mandatory for GPU instancing.",
+      "lods": {
+        "max": 1,
+        "max_ratio": [
+          1.0,
+          0.5,
+          0.25,
+          0.125
+        ],
+        "min": 1,
+        "tolerance": 0.1
+      },
+      "max_materials": 1,
+      "mesh_types": [
+        "SK"
+      ],
+      "pivot": {
+        "mode": "bottom_center",
+        "tolerance_cm": 0.5
+      },
+      "severity_overrides": {},
+      "size_cm": {
+        "max": 300.0,
+        "min": 50.0
+      },
+      "texture_max_size": 256,
+      "tris_max": 800,
+      "uv": {
+        "overlap_allowed": true,
+        "required_sets": [
+          "map1"
+        ],
+        "unit_square": true
+      }
+    },
+    "env_module": {
+      "description": "Modular environment kit pieces (floor tiles, walls, track pieces).",
+      "lods": {
+        "max": 2,
+        "max_ratio": [
+          1.0,
+          0.5,
+          0.25,
+          0.125
+        ],
+        "min": 1,
+        "tolerance": 0.1
+      },
+      "max_materials": 1,
+      "mesh_types": [
+        "SM"
+      ],
+      "pivot": {
+        "mode": "origin",
+        "tolerance_cm": 0.5
+      },
+      "severity_overrides": {
+        "topology.open_borders": "warning"
+      },
+      "size_cm": {
+        "max": 5000.0,
+        "min": 50.0
+      },
+      "texture_max_size": 1024,
+      "tris_max": 2000,
+      "uv": {
+        "overlap_allowed": true,
+        "required_sets": [
+          "map1"
+        ],
+        "unit_square": false
+      }
+    },
+    "pickup": {
+      "description": "Coins, gems, collectibles. Dozens on screen, usually spinning.",
+      "lods": {
+        "max": 1,
+        "max_ratio": [
+          1.0,
+          0.5,
+          0.25,
+          0.125
+        ],
+        "min": 1,
+        "tolerance": 0.1
+      },
+      "max_materials": 1,
+      "mesh_types": [
+        "SM"
+      ],
+      "pivot": {
+        "mode": "center",
+        "tolerance_cm": 0.5
+      },
+      "severity_overrides": {},
+      "size_cm": {
+        "max": 100.0,
+        "min": 5.0
+      },
+      "texture_max_size": 128,
+      "tris_max": 300,
+      "uv": {
+        "overlap_allowed": true,
+        "required_sets": [
+          "map1"
+        ],
+        "unit_square": true
+      }
+    },
+    "prop_hero": {
+      "description": "Focal props the camera dwells on (chests, upgrade stations).",
+      "lods": {
+        "max": 3,
+        "max_ratio": [
+          1.0,
+          0.5,
+          0.25,
+          0.125
+        ],
+        "min": 1,
+        "tolerance": 0.1
+      },
+      "max_materials": 2,
+      "mesh_types": [
+        "SM"
+      ],
+      "pivot": {
+        "mode": "bottom_center",
+        "tolerance_cm": 0.5
+      },
+      "severity_overrides": {},
+      "size_cm": {
+        "max": 1000.0,
+        "min": 20.0
+      },
+      "texture_max_size": 1024,
+      "tris_max": 3000,
+      "uv": {
+        "overlap_allowed": true,
+        "required_sets": [
+          "map1"
+        ],
+        "unit_square": true
+      }
+    },
+    "prop_medium": {
+      "description": "Furniture-scale props, obstacles.",
+      "lods": {
+        "max": 2,
+        "max_ratio": [
+          1.0,
+          0.5,
+          0.25,
+          0.125
+        ],
+        "min": 1,
+        "tolerance": 0.1
+      },
+      "max_materials": 1,
+      "mesh_types": [
+        "SM"
+      ],
+      "pivot": {
+        "mode": "bottom_center",
+        "tolerance_cm": 0.5
+      },
+      "severity_overrides": {},
+      "size_cm": {
+        "max": 400.0,
+        "min": 30.0
+      },
+      "texture_max_size": 512,
+      "tris_max": 1500,
+      "uv": {
+        "overlap_allowed": true,
+        "required_sets": [
+          "map1"
+        ],
+        "unit_square": true
+      }
+    },
+    "prop_small": {
+      "description": "Small set dressing (bottle, cone, crate). Many instances.",
+      "lods": {
+        "max": 1,
+        "max_ratio": [
+          1.0,
+          0.5,
+          0.25,
+          0.125
+        ],
+        "min": 1,
+        "tolerance": 0.1
+      },
+      "max_materials": 1,
+      "mesh_types": [
+        "SM"
+      ],
+      "pivot": {
+        "mode": "bottom_center",
+        "tolerance_cm": 0.5
+      },
+      "severity_overrides": {},
+      "size_cm": {
+        "max": 150.0,
+        "min": 5.0
+      },
+      "texture_max_size": 256,
+      "tris_max": 500,
+      "uv": {
+        "overlap_allowed": true,
+        "required_sets": [
+          "map1"
+        ],
+        "unit_square": true
+      }
+    },
+    "vehicle": {
+      "description": "Cars, boats, karts.",
+      "lods": {
+        "max": 3,
+        "max_ratio": [
+          1.0,
+          0.5,
+          0.25,
+          0.125
+        ],
+        "min": 1,
+        "tolerance": 0.1
+      },
+      "max_materials": 2,
+      "mesh_types": [
+        "SM"
+      ],
+      "pivot": {
+        "mode": "bottom_center",
+        "tolerance_cm": 0.5
+      },
+      "severity_overrides": {},
+      "size_cm": {
+        "max": 1500.0,
+        "min": 100.0
+      },
+      "texture_max_size": 1024,
+      "tris_max": 4000,
+      "uv": {
+        "overlap_allowed": true,
+        "required_sets": [
+          "map1"
+        ],
+        "unit_square": true
+      }
+    }
+  },
+  "generated_by": "artpipe conventions --dump",
+  "lock_version": 1,
+  "naming": {
+    "group_node": {
+      "description": "Optional single root group in the Maya scene. Must equal the file name without extension.",
+      "examples": [
+        "SM_Crate",
+        "SM_Crate_A",
+        "SK_Runner_01"
+      ],
+      "invalid_examples": [
+        "group1",
+        "SM_Crate_LOD0",
+        "SM_Crate_a"
+      ],
+      "pattern": "^(SM|SK)_[A-Z][A-Za-z0-9]{1,31}(_([A-Z]|[0-9]{2}))?$"
+    },
+    "material": {
+      "description": "Material name. Shared atlas materials across many assets are encouraged on mobile (fewer draw calls, better batching).",
+      "examples": [
+        "M_Crate",
+        "M_PropsAtlas",
+        "M_Runner_01"
+      ],
+      "invalid_examples": [
+        "lambert1",
+        "MAT_Crate",
+        "M_crate",
+        "M_Crate_Wood"
+      ],
+      "pattern": "^M_[A-Z][A-Za-z0-9]{1,31}(_([A-Z]|[0-9]{2}))?$"
+    },
+    "mesh_file": {
+      "description": "Exported model file. SM_ = static mesh, SK_ = skinned mesh. Optional variant: one capital letter or two digits.",
+      "examples": [
+        "SM_Crate.fbx",
+        "SM_Crate_A.fbx",
+        "SK_Runner_01.fbx"
+      ],
+      "invalid_examples": [
+        "sm_crate.fbx",
+        "SM_crate.fbx",
+        "SM_Crate_A_LOD0.fbx",
+        "SM_Wooden_Crate.fbx",
+        "SM_Crate.FBX",
+        "SM_Crate.obj"
+      ],
+      "pattern": "^(SM|SK)_[A-Z][A-Za-z0-9]{1,31}(_([A-Z]|[0-9]{2}))?\\.fbx$"
+    },
+    "mesh_node": {
+      "description": "Mesh transform. _LOD<n> (0-3) is required when the asset has more than one LOD and omitted otherwise. Unity's model importer builds a LODGroup automatically from _LOD0.._LODn suffixes.",
+      "examples": [
+        "SM_Crate",
+        "SM_Crate_A_LOD0",
+        "SM_Crate_A_LOD2",
+        "SK_Runner_01_LOD1"
+      ],
+      "invalid_examples": [
+        "pCube1",
+        "SM_Crate_LOD4",
+        "SM_Crate_lod0",
+        "SM_Crate__A",
+        "SM_Crate_ABC",
+        "SM_Crate_A_LOD0 "
+      ],
+      "pattern": "^(SM|SK)_[A-Z][A-Za-z0-9]{1,31}(_([A-Z]|[0-9]{2}))?(_LOD[0-3])?$"
+    },
+    "texture_file": {
+      "description": "Texture file. Suffix = map type, defined in texture_rules.yaml (D base color, N normal, MS metallic/smoothness, AO occlusion, E emission).",
+      "examples": [
+        "T_Crate_D.png",
+        "T_Crate_A_N.png",
+        "T_PropsAtlas_MS.tga"
+      ],
+      "invalid_examples": [
+        "T_Crate.png",
+        "T_Crate_Diffuse.png",
+        "T_Crate_D.jpg",
+        "T_Crate_D.psd",
+        "Crate_D.png",
+        "T_Crate_d.png"
+      ],
+      "pattern": "^T_[A-Z][A-Za-z0-9]{1,31}(_([A-Z]|[0-9]{2}))?_(D|N|MS|AO|E)\\.(png|tga)$"
+    }
+  },
+  "sources": {
+    "mesh_budgets.yaml": "66fa8d8cc342bd7c744e7f97b6c4c77096d5f64342eca2e96f0af1e91f8cd7b5",
+    "naming.schema.json": "796b030630d0a9b832b9815139301e0c825e862c52e8493e1b53707c4aed6e34",
+    "texture_rules.yaml": "ee87884e2ae05bc5b7939c232f21798129b820ae003ebca3d1a153efb0c43ecf"
+  },
+  "textures": {
+    "min_size": 32,
+    "mipmaps": true,
+    "power_of_two": true,
+    "source_formats": [
+      "png",
+      "tga"
+    ],
+    "square_required": false,
+    "types": {
+      "AO": {
+        "alpha": "forbidden",
+        "channels": {
+          "r": "occlusion"
+        },
+        "color_space": "linear",
+        "description": "Ambient occlusion (separate map in URP Lit).",
+        "formats": {
+          "android": "ASTC_6x6",
+          "ios": "ASTC_6x6"
+        }
+      },
+      "D": {
+        "alpha": "optional",
+        "channels": {
+          "a": "opacity",
+          "rgb": "base_color"
+        },
+        "color_space": "srgb",
+        "description": "Base color (albedo).",
+        "formats": {
+          "android": "ASTC_6x6",
+          "ios": "ASTC_6x6"
+        }
+      },
+      "E": {
+        "alpha": "forbidden",
+        "channels": {
+          "rgb": "emission"
+        },
+        "color_space": "srgb",
+        "description": "Emission.",
+        "formats": {
+          "android": "ASTC_6x6",
+          "ios": "ASTC_6x6"
+        }
+      },
+      "MS": {
+        "alpha": "required",
+        "channels": {
+          "a": "smoothness",
+          "r": "metallic"
+        },
+        "color_space": "linear",
+        "description": "URP Lit metallic map (metallic in R, smoothness in A).",
+        "formats": {
+          "android": "ASTC_6x6",
+          "ios": "ASTC_6x6"
+        }
+      },
+      "N": {
+        "alpha": "forbidden",
+        "channels": {
+          "rgb": "normal"
+        },
+        "color_space": "linear",
+        "description": "Tangent-space normal map.",
+        "formats": {
+          "android": "ASTC_4x4",
+          "ios": "ASTC_4x4"
+        }
+      }
+    }
+  },
+  "units": {
+    "linear": "cm"
+  }
+}

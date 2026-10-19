@@ -18,6 +18,7 @@ namespace Artpipe
             Serialization(),
             RenderPipeline(),
             BuildTarget(),
+            Conventions(),
         };
 
         // In Gamma space Unity ignores the texture sRGB flag, so the
@@ -68,6 +69,27 @@ namespace Artpipe
                 new Dictionary<string, object> { ["build_target"] = target.ToString() },
                 ok ? "Active build target is Android."
                    : $"Active build target is {target}; run Unity with -buildTarget Android.");
+        }
+
+        // Every rule comes from conventions.lock.json. A missing, malformed or
+        // stale lock means Unity would apply rules Maya never validated against.
+        static CheckResult Conventions()
+        {
+            try
+            {
+                var lockFile = ConventionsLock.Load();
+                return Result("env.conventions", true,
+                    new Dictionary<string, object>
+                    {
+                        ["lock_version"] = lockFile.LockVersion,
+                        ["classes"] = lockFile.Classes.Count,
+                    },
+                    "conventions.lock.json loaded and matches its sources.");
+            }
+            catch (ConventionsException e)
+            {
+                return Result("env.conventions", false, new Dictionary<string, object>(), e.Message);
+            }
         }
 
         static CheckResult Result(string id, bool passed, Dictionary<string, object> metrics, string message)

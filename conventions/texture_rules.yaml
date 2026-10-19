@@ -62,8 +62,8 @@ types:
     channels: {rgb: emission}
     alpha: forbidden
 
-# Consumed by the Phase 2 Unity TexturePostprocessor/presets. Not validated
-# in Phase 1 (see docs/backlog.md #14).
+# Unity import settings. Resolved per map type (defaults + overrides) into
+# conventions.lock.json and applied by the Unity texture importer.
 import_hints:
   mipmaps: true
   android: {format: ASTC_6x6}

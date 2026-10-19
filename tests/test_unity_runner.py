@@ -129,3 +129,31 @@ def test_find_unity_env_override_must_exist(tmp_path):
 def test_every_run_targets_android():
     cmd = u.base_command(Path("Unity.exe"), Path("x.log"))
     assert cmd[cmd.index("-buildTarget") + 1] == "Android"
+
+
+def test_open_editor_is_detected(tmp_path):
+    (tmp_path / "Temp").mkdir()
+    (tmp_path / "Temp" / "UnityLockfile").write_bytes(b"")
+
+    def held(path, mode):
+        raise PermissionError(13, "Permission denied", path)
+
+    assert u.project_locked(tmp_path, opener=held) is True
+
+
+def test_leftover_lockfile_after_a_crash_is_not_a_lock(tmp_path):
+    (tmp_path / "Temp").mkdir()
+    (tmp_path / "Temp" / "UnityLockfile").write_bytes(b"")
+    assert u.project_locked(tmp_path) is False
+
+
+def test_no_lockfile_is_not_a_lock(tmp_path):
+    assert u.project_locked(tmp_path) is False
+
+
+def test_locked_project_is_a_tool_error_before_unity_starts(monkeypatch, capsys):
+    monkeypatch.setattr(u, "find_unity", lambda: Path("Unity.exe"))
+    monkeypatch.setattr(u, "project_locked", lambda: True)
+    monkeypatch.setattr(u, "run_unity", lambda cmd: pytest.fail("Unity must not be launched"))
+    assert u.main(["import"]) == u.EXIT_TOOL_ERROR
+    assert "Close it and retry" in capsys.readouterr().err
