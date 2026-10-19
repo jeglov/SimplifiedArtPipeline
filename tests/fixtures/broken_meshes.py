@@ -72,12 +72,38 @@ EXPECT = {
     "SK_SkinnedHistory": ("character", ["scene.history"]),       # polyTriangulate UNDER a skinCluster
     # Stacked faces also stack in UV (info). Fix is blocked: the mesh is skinned.
     "SK_SkinnedLamina": ("character", ["topology.lamina_faces", "uv.overlap"]),
+    "SM_NegativeScale": ("prop_small", ["transform.frozen"]),    # mirrored with scale -1: freeze is blocked
+    # A realistic messy export: six problems, all safely fixable.
+    "SM_Messy": ("prop_small", ["naming.convention", "scene.history", "scene.units",
+                                "transform.frozen", "transform.pivot", "uv.present"]),
+}
+
+# Checks still failing after `--fix`, where that differs from EXPECT.
+# Fixtures not listed here must fail exactly the same checks after --fix
+# (nothing safely fixable, or the fix is blocked on purpose).
+FIX_EXPECT = {
+    "SM_WithHistory": [],
+    "SK_SkinnedHistory": [],
+    "SM_Lamina": ["topology.open_borders"],  # removing the duplicate reveals a single open quad
+    "SM_NotFrozen": [],
+    "SM_GroupNotFrozen": [],
+    "SM_GeoOffset": [],
+    "SM_PivotMoved": [],
+    "SM_PickupOnGround": [],
+    "SM_UVSetName": [],
+    "SM_UVSetOrder": [],
+    "SM_Meters": [],
+    "SM_BadMeshName": [],
+    "SM_BadGroupName": [],
+    "SM_BadMaterialName": [],
+    "SM_Messy": [],
 }
 
 # Fixtures whose builder handles placement itself (see _conform).
 SELF_PLACED = {"SM_NotFrozen", "SM_GroupNotFrozen", "SM_GeoOffset", "SM_PivotMoved",
                "SM_PickupCentered", "SM_PickupOnGround", "SM_TooSmall", "SM_TooBig", "SM_Meters",
-               "SM_WithHistory", "SK_Skinned", "SK_SkinnedHistory", "SK_SkinnedLamina"}
+               "SM_WithHistory", "SK_Skinned", "SK_SkinnedHistory", "SK_SkinnedLamina",
+               "SM_NegativeScale", "SM_Messy"}
 
 
 def _merge(name, parts):
@@ -416,6 +442,28 @@ def build_skinned_lamina():
     _skin(mesh)
 
 
+def build_negative_scale():
+    from maya import cmds
+    mesh = _merge("SM_NegativeScale", [_cube()])
+    _conform()
+    cmds.scale(-1, 1, 1, mesh)  # "mirrored" the lazy way: symmetric cube, bbox unchanged
+
+
+def build_messy():
+    """What a rushed or tool-generated export looks like: default mesh and
+    material names, a foreign UV set name, live history, unfrozen transform,
+    off-centre geometry and a metre scene."""
+    from maya import cmds
+    mesh = _merge("pCube1", [_cube()])
+    _conform()
+    cmds.sets(mesh, edit=True, forceElement=_material("lambert2"))
+    cmds.polyUVSet(mesh, rename=True, uvSet="map1", newUVSet="UVChannel_1")
+    cmds.rotate(0, 45, 0, mesh)
+    cmds.move(0, 20, 0, mesh, relative=True)
+    cmds.polyTriangulate(mesh, constructionHistory=True)
+    cmds.currentUnit(linear="m")
+
+
 def _default_material(name):
     """Give faces still on lambert1 a material that follows the convention:
     "SM_LodsGood" -> "M_LodsGood", "crate_final_v2" -> "M_FinalV2"."""
@@ -469,8 +517,11 @@ BUILDERS = {
     "SK_Skinned": build_skinned,
     "SK_SkinnedHistory": build_skinned_history,
     "SK_SkinnedLamina": build_skinned_lamina,
+    "SM_NegativeScale": build_negative_scale,
+    "SM_Messy": build_messy,
 }
 assert set(BUILDERS) == set(EXPECT), "every fixture needs an expectation"
+assert set(FIX_EXPECT) <= set(EXPECT), "FIX_EXPECT names an unknown fixture"
 
 
 def build_all(out_dir):

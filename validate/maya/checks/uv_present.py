@@ -16,7 +16,7 @@ from validate.maya.meshes import component_names, mesh_fn, plural
 
 ID = "uv.present"
 SEVERITY = Severity.ERROR
-FIXABLE = False
+FIXABLE = True  # see validate/maya/fixes/uv_present.py
 DESCRIPTION = "Required UV sets exist, come first in the set order, and map every face."
 
 

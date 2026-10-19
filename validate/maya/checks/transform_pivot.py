@@ -24,7 +24,7 @@ from validate.maya.meshes import hierarchy, plural, roots, transform_fn, world_b
 
 ID = "transform.pivot"
 SEVERITY = Severity.ERROR
-FIXABLE = False
+FIXABLE = True  # see validate/maya/fixes/transform_pivot.py
 DESCRIPTION = "Pivots are at the world origin and the geometry is placed per the class pivot mode."
 
 

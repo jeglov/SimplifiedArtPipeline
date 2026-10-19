@@ -18,7 +18,7 @@ from validate.maya.meshes import hierarchy, plural
 
 ID = "transform.frozen"
 SEVERITY = Severity.ERROR
-FIXABLE = False
+FIXABLE = True  # see validate/maya/fixes/transform_frozen.py
 DESCRIPTION = "Meshes and their parent groups have frozen transforms (t=0, r=0, s=1, no shear)."
 
 TOLERANCE = 1e-4

@@ -29,8 +29,13 @@ from validate.maya.checks import (
     uv_present,
     uv_unit_square,
 )
+from validate.maya.fixes import naming_convention as fix_naming_convention
 from validate.maya.fixes import scene_history as fix_scene_history
+from validate.maya.fixes import scene_units as fix_scene_units
 from validate.maya.fixes import topology_lamina_faces as fix_topology_lamina_faces
+from validate.maya.fixes import transform_frozen as fix_transform_frozen
+from validate.maya.fixes import transform_pivot as fix_transform_pivot
+from validate.maya.fixes import uv_present as fix_uv_present
 
 CHECKS = (
     scene_has_meshes,
@@ -57,12 +62,19 @@ CHECKS = (
     scene_history,
 )
 
-# Fixes, in the order they are APPLIED. Order matters: fixes that delete or
-# bake geometry come first, so later fixes (transforms, renames) see the
-# final topology.
+# Fixes, in the order they are APPLIED. Order matters:
+#   1. geometry (delete, bake) first, so later fixes see the final topology
+#   2. data on the mesh (UV sets), then scene settings (units)
+#   3. freeze BEFORE pivot: the pivot fix refuses to move unfrozen geometry
+#   4. renames last, so every earlier fix worked on the original names
 FIXES = (
     fix_topology_lamina_faces,
     fix_scene_history,
+    fix_uv_present,
+    fix_scene_units,
+    fix_transform_frozen,
+    fix_transform_pivot,
+    fix_naming_convention,
 )
 
 _REQUIRED = ("ID", "SEVERITY", "FIXABLE", "DESCRIPTION", "run")

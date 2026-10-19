@@ -31,7 +31,7 @@ from validate.maya.meshes import hierarchy, materials, roots, short_name
 
 ID = "naming.convention"
 SEVERITY = Severity.ERROR
-FIXABLE = False
+FIXABLE = True  # see validate/maya/fixes/naming_convention.py
 DESCRIPTION = "Names follow naming.schema.json; one root named like the file; consistent LOD suffixes."
 
 

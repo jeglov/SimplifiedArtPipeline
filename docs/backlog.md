@@ -31,6 +31,7 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 26 | P2 | Only UV0 is checked for overlap. A hand-authored UV1 (lightmap) must NOT overlap | Overlapping lightmap UVs bake light from one surface onto another | If UV1 exists, check it with overlap never allowed. Otherwise rely on Unity's "Generate Lightmap UVs" |
 | 27 | P2 | `--fix` can only save fixed `.ma`/`.mb` files. A fixed FBX input is refused | Unity imports FBX, so the agent loop needs FBX in and FBX out | Add FBX export with explicit, versioned exporter settings (smoothing groups, tangents, no cameras/lights) in the Unity import stage |
 | 28 | P2 | Volatile lines (save time, file and node UUIDs) are stripped only from `.ma`. A fixed `.mb` gets a new sha256 on every run | Breaks the byte-identical promise for binary scenes | Keep fixed outputs as `.ma` (or FBX, see #27), or hash a canonical export instead of the file bytes |
+| 29 | P1.5 | No check for a shape's `opposite` flag (set when Maya freezes a negative scale) | FBX doesn't carry the flag: the mesh imports into Unity inside out while it looks fine in Maya | Add a `topology.inverted` check (opposite flag set, or normals pointing inward on a closed mesh). The freeze fix already refuses negative scale |
 
 ## Done
 

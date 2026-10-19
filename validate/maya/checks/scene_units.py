@@ -21,7 +21,7 @@ from validate.core.result import CheckResult, Severity
 
 ID = "scene.units"
 SEVERITY = Severity.WARNING
-FIXABLE = False
+FIXABLE = True  # see validate/maya/fixes/scene_units.py
 DESCRIPTION = "The scene's linear unit matches the conventions (cm). Not verifiable for FBX yet."
 
 
