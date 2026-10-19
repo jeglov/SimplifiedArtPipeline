@@ -42,6 +42,7 @@ EXPECT = {
     "SM_TooManyLods": ("prop_small", ["budget.lods"]),           # 2 levels, prop_small allows 1
     "SM_TwoMaterials": ("prop_small", ["budget.materials"]),     # 2 materials, prop_small allows 1
     "SM_NoMaterial": ("prop_small", ["budget.materials"]),
+    "SM_PartialMaterial": ("prop_small", ["budget.materials"]),  # 1 of 6 faces has no material
     "SM_NoUVs": ("prop_small", ["uv.present"]),
     "SM_UnmappedFace": ("prop_small", ["uv.present"]),
     "SM_UVSetName": ("prop_small", ["uv.present"]),              # "UVChannel_1" instead of map1
@@ -203,6 +204,15 @@ def build_two_materials():
     mesh = _merge("SM_TwoMaterials", [_cube()])
     cmds.sets(mesh + ".f[0:2]", edit=True, forceElement=_material("M_TwoMaterials_A"))
     cmds.sets(mesh + ".f[3:5]", edit=True, forceElement=_material("M_TwoMaterials_B"))
+
+
+def build_partial_material():
+    from maya import cmds
+    mesh = _merge("SM_PartialMaterial", [_cube()])
+    # Removing one face from a whole-object assignment does nothing (Maya
+    # rewrites it as f[0:5]). So: clear the default, then assign faces 0-4.
+    cmds.sets(mesh, edit=True, remove="initialShadingGroup")
+    cmds.sets(mesh + ".f[0:4]", edit=True, forceElement=_material("M_PartialMaterial"))
 
 
 def build_no_material():
@@ -405,6 +415,7 @@ BUILDERS = {
     "SM_TooManyLods": build_too_many_lods,
     "SM_TwoMaterials": build_two_materials,
     "SM_NoMaterial": build_no_material,
+    "SM_PartialMaterial": build_partial_material,
     "SM_NoUVs": build_no_uvs,
     "SM_UnmappedFace": build_unmapped_face,
     "SM_UVSetName": build_uv_set_name,

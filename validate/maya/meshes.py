@@ -15,7 +15,7 @@ imported lazily by the CLI for exactly that reason).
 """
 from __future__ import annotations
 
-from typing import Iterable, List
+from typing import Dict, Iterable, List, Optional, Set
 
 import maya.api.OpenMaya as om
 from maya import cmds
@@ -37,20 +37,38 @@ def mesh_fn(transform: str) -> om.MFnMesh:
     return om.MFnMesh(sel.getDagPath(0))
 
 
-def materials(transform: str) -> List[str]:
-    """Sorted material names actually assigned to the mesh (one per shading engine)."""
+def material_faces(transform: str) -> Dict[str, Optional[Set[int]]]:
+    """Material name -> face indices it covers on this mesh (None = the whole mesh).
+
+    Read from shading-engine MEMBERSHIP, not connections: reassigning faces
+    often leaves a stale link to initialShadingGroup with no faces in it.
+    """
     shape = mesh_shape(transform)
-    names = []
-    for sg in set(cmds.listConnections(shape, type="shadingEngine") or []):
-        # A connection alone isn't an assignment: reassigning faces often
-        # leaves a stale link to initialShadingGroup with no faces in it.
-        # Count the engine only if this mesh (or some of its faces) is a member.
-        members = cmds.ls(cmds.sets(sg, query=True) or [], long=True)
-        if not any(m.split(".")[0] in (transform, shape) for m in members):
+    out: Dict[str, Optional[Set[int]]] = {}
+    for sg in sorted(set(cmds.listConnections(shape, type="shadingEngine") or [])):
+        whole, faces = False, set()
+        for member in cmds.ls(cmds.sets(sg, query=True) or [], long=True):
+            node, _, component = member.partition(".")
+            if node not in (transform, shape):
+                continue
+            if not component:
+                whole = True
+            else:  # "|SM_Crate.f[0:2]" -> 0, 1, 2
+                for face in cmds.ls(member, flatten=True):
+                    faces.add(int(face[face.rindex("[") + 1:-1]))
+        if not whole and not faces:
             continue
-        shader = cmds.listConnections(sg + ".surfaceShader") or ["<no shader>"]
-        names.append(shader[0])
-    return sorted(names)
+        shader = (cmds.listConnections(sg + ".surfaceShader") or ["<no shader>"])[0]
+        if whole or out.get(shader, set()) is None:
+            out[shader] = None
+        else:
+            out[shader] = out.get(shader, set()) | faces
+    return out
+
+
+def materials(transform: str) -> List[str]:
+    """Sorted material names actually assigned to the mesh."""
+    return sorted(material_faces(transform))
 
 
 def short_name(path: str) -> str:

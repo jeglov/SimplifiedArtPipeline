@@ -9,7 +9,7 @@ This module is the contract between the validator and whoever consumes it
    tell "the asset changed" from "the tool is flaky".
 
 Determinism is enforced here, centrally, instead of trusting each check:
-offenders are de-duplicated + sorted + capped, floats are rounded, and JSON
+offenders are de-duplicated + sorted (+ capped on output), floats are rounded, and JSON
 is written with sorted keys. A check author can't accidentally break it.
 
 Pure Python (no maya import) so reports can be built/parsed anywhere.
@@ -27,9 +27,12 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 # Bump when the report shape changes so consumers can branch on it.
 SCHEMA_VERSION = "1.0"
 
-# Max offenders stored per check. A 50k-tri mesh with every face ngon'd would
-# otherwise produce a multi-MB report that is useless to a human and wastes an
-# LLM's context window. The full count is still reported in offender_count.
+# Default max offenders WRITTEN per check. A 50k-tri mesh with every face
+# ngon'd would otherwise produce a multi-MB report that is useless to a human
+# and wastes an LLM's context window. The full count is still reported in
+# offender_count. Results keep every offender in memory; the cap is applied
+# when the report is serialised (Report.max_offenders, CLI --max-offenders,
+# 0 = unlimited for a fix-planning agent that needs the full list).
 OFFENDER_CAP = 50
 
 # Float precision for metrics. 6 decimals = 0.00001 cm, far below anything
@@ -129,9 +132,10 @@ class CheckResult:
     fixable: bool
     metrics: Dict[str, Any] = field(default_factory=dict)
     # Node or component names that caused the failure (e.g. "|crate_GEO.f[12]").
-    # Accepts any sequence; stored as a sorted, de-duplicated, capped tuple.
+    # Accepts any sequence; stored as a sorted, de-duplicated tuple (all of
+    # them: capping happens in to_dict()).
     offenders: Sequence[str] = ()
-    # Total offenders BEFORE capping. Computed, not passed in.
+    # Total offenders. Computed, not passed in.
     offender_count: int = field(init=False, default=0)
 
     def __post_init__(self) -> None:
@@ -143,7 +147,7 @@ class CheckResult:
         # Accept "error" as well as Severity.ERROR; reject typos like "err".
         object.__setattr__(self, "severity", Severity(self.severity))
 
-        # Natural order: the cap then keeps the LOWEST component indices,
+        # Natural order: a cap then keeps the LOWEST component indices,
         # which is what a human expects to see first.
         unique = sorted({str(o) for o in self.offenders}, key=_natural_key)
         if self.passed and unique:
@@ -151,7 +155,7 @@ class CheckResult:
             # check's pass/fail logic and its offender collection disagree.
             raise ValueError("%s: passed=True but offenders were given" % self.id)
         object.__setattr__(self, "offender_count", len(unique))
-        object.__setattr__(self, "offenders", tuple(unique[:OFFENDER_CAP]))
+        object.__setattr__(self, "offenders", tuple(unique))
         object.__setattr__(self, "metrics", _normalize(dict(self.metrics)))
 
     @property
@@ -159,7 +163,9 @@ class CheckResult:
         """True if this result alone makes the asset fail."""
         return not self.passed and self.severity is Severity.ERROR
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self, max_offenders: int = OFFENDER_CAP) -> Dict[str, Any]:
+        """JSON-ready dict. max_offenders caps the list (0 = no cap)."""
+        offenders = self.offenders[:max_offenders] if max_offenders else self.offenders
         return {
             "id": self.id,
             "passed": self.passed,
@@ -167,7 +173,7 @@ class CheckResult:
             "message": self.message,
             "fixable": self.fixable,
             "metrics": self.metrics,
-            "offenders": list(self.offenders),
+            "offenders": list(offenders),
             "offender_count": self.offender_count,
         }
 
@@ -179,9 +185,10 @@ class Report:
     `results` keep registry order (cheap checks first, logically grouped);
     they are not re-sorted, so the order itself is part of the contract.
 
-    Note: source.path is echoed exactly as given by the caller. The file's
-    identity is source.sha256 - two machines validating the same bytes from
-    different paths get different `path` but the same hash and results.
+    source.path is whatever the caller passes. The CLI passes a repo-relative
+    POSIX path for files inside the repo (validate.core.paths), so the same
+    asset gives the same report on every machine. The file's identity is
+    still source.sha256.
     """
 
     source_path: str
@@ -192,8 +199,12 @@ class Report:
     # be partial or empty; consumers must not treat this as an asset verdict.
     tool_error: Optional[str] = None
     tool: str = "artpipe.validate.maya"
+    # Offenders written per check (0 = all). See OFFENDER_CAP.
+    max_offenders: int = OFFENDER_CAP
 
     def __post_init__(self) -> None:
+        if self.max_offenders < 0:
+            raise ValueError("max_offenders must be >= 0 (0 = unlimited)")
         seen = set()
         for r in self.results:
             if r.id in seen:
@@ -236,7 +247,7 @@ class Report:
             "status": self.status.value,
             "tool_error": self.tool_error,
             "summary": self.summary(),
-            "results": [r.to_dict() for r in self.results],
+            "results": [r.to_dict(self.max_offenders) for r in self.results],
         }
 
     def to_json(self) -> str:

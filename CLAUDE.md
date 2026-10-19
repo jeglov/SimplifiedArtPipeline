@@ -32,8 +32,8 @@ Deferred issues are tracked in [docs/backlog.md](docs/backlog.md), tagged by sta
 
 ## Environment
 - Windows 11, Maya 2023 (`mayapy`, Python 3.9)
-- mayapy: `C:\Program Files\Autodesk\Maya2023\bin\mayapy.exe` (hardcoded for now, see backlog #2)
-- Run the tests: `& "C:\Program Files\Autodesk\Maya2023\bin\mayapy.exe" -m pytest -q`
+- mayapy: `C:\Program Files\Autodesk\Maya2023\bin\mayapy.exe`, found automatically by `artpipe.cmd` (or set `MAYAPY`)
+- Run the tests: `.\artpipe.cmd test`. Validate: `.\artpipe.cmd validate FILE --class prop_small`. Raw mayapy: `.\artpipe.cmd py ...`
 - The user works both locally and in Claude Code.
 
 ## About the user

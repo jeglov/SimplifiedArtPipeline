@@ -1,5 +1,8 @@
 # Normalise text to LF so diffs of reports/conventions are identical on every OS.
 * text=auto eol=lf
+# Windows batch files misparse labels/goto with LF endings: keep CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
 # Maya ASCII is text (diffable), but must not be re-encoded.
 *.ma  text eol=lf
 # Binary DCC / image formats: never touch line endings.

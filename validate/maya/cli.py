@@ -1,6 +1,7 @@
 """Command line entry point: validate one or more files, one JSON report each.
 
-    mayapy -m validate.maya.cli FILE [FILE ...] --class prop_small [--out out]
+    mayapy -m validate.maya.cli FILE [FILE ...] --class prop_small [--out out] [--max-offenders N]
+    (or, from the repo root: artpipe validate FILE ... --class prop_small)
 
 Writes <out>/<file name>.report.json per input and prints one summary line
 per file. Exit code is the worst across files: 0 pass, 1 asset failed,
@@ -18,7 +19,8 @@ from typing import List, Optional
 
 from validate.core import conventions as conv
 from validate.core.conventions import AssetClass, Conventions
-from validate.core.result import EXIT_TOOL_ERROR, Report
+from validate.core.paths import report_path
+from validate.core.result import EXIT_TOOL_ERROR, OFFENDER_CAP, Report
 
 
 def sha256(path: Path) -> str:
@@ -36,27 +38,37 @@ def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
                    help="asset class from conventions/mesh_budgets.yaml, e.g. prop_small")
     p.add_argument("--out", type=Path, default=Path("out"), help="report folder (default: out)")
     p.add_argument("--conventions", type=Path, default=None, help="conventions folder (default: repo's)")
-    return p.parse_args(argv)
+    p.add_argument("--max-offenders", type=int, default=OFFENDER_CAP, metavar="N",
+                   help="offenders written per check (default %d, 0 = all)" % OFFENDER_CAP)
+    args = p.parse_args(argv)
+    if args.max_offenders < 0:
+        p.error("--max-offenders must be >= 0")
+    return args
 
 
-def validate_file(path: Path, conventions: Conventions, asset_class: AssetClass) -> Report:
+def validate_file(path: Path, conventions: Conventions, asset_class: AssetClass,
+                  max_offenders: int = OFFENDER_CAP) -> Report:
     """Open one file and run all checks. Never raises: failures become tool_error."""
     from validate.maya import context, registry, session
 
+    # Repo-relative, forward slashes: same report on every machine (backlog #3).
+    shown = report_path(path)
+
+    def report(digest, **kw):
+        return Report(shown, digest, asset_class.name, max_offenders=max_offenders, **kw)
+
     if not path.is_file():
-        return Report(str(path), "", asset_class.name, tool_error="file not found: %s" % path)
+        return report("", tool_error="file not found: %s" % shown)
 
     digest = sha256(path)
     try:
         session.open_scene(path)
-        ctx = context.build(str(path), conventions, asset_class)
+        ctx = context.build(shown, conventions, asset_class)
     except Exception as exc:  # noqa: BLE001
-        return Report(str(path), digest, asset_class.name,
-                      tool_error="could not open file: %s: %s" % (type(exc).__name__, exc))
+        return report(digest, tool_error="could not open file: %s: %s" % (type(exc).__name__, exc))
 
     results, errors = registry.run_all(ctx)
-    return Report(str(path), digest, asset_class.name, results=results,
-                  tool_error="; ".join(errors) or None)
+    return report(digest, results=results, tool_error="; ".join(errors) or None)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -85,7 +97,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.out.mkdir(parents=True, exist_ok=True)
         worst = 0
         for path in args.files:
-            report = validate_file(path, conventions, asset_class)
+            report = validate_file(path, conventions, asset_class, args.max_offenders)
             # Full file name, not stem: SM_Crate.ma and SM_Crate.fbx must not
             # overwrite each other's report.
             out_file = args.out / (path.name + ".report.json")

@@ -54,11 +54,25 @@ def test_bad_ids_rejected(bad_id):
 
 def test_offenders_sorted_deduped_and_capped():
     many = ["|m.f[%d]" % i for i in reversed(range(OFFENDER_CAP + 25))] + ["|m.f[0]"]
-    r = _fail(offenders=many)
-    assert r.offender_count == OFFENDER_CAP + 25  # total kept, duplicate removed
-    assert len(r.offenders) == OFFENDER_CAP  # list capped
+    full = _fail(offenders=many)
+    assert full.offender_count == OFFENDER_CAP + 25  # total kept, duplicate removed
+    assert len(full.offenders) == OFFENDER_CAP + 25  # all kept in memory
+    r = full.to_dict()  # ...capped when written
+    assert r["offender_count"] == OFFENDER_CAP + 25
+    assert len(r["offenders"]) == OFFENDER_CAP
     # Natural order, and the cap keeps the lowest indices.
-    assert list(r.offenders) == ["|m.f[%d]" % i for i in range(OFFENDER_CAP)]
+    assert r["offenders"] == ["|m.f[%d]" % i for i in range(OFFENDER_CAP)]
+
+
+def test_max_offenders_configurable():
+    many = ["|m.f[%d]" % i for i in range(120)]
+    assert len(_report([_fail(offenders=many)]).to_dict()["results"][0]["offenders"]) == OFFENDER_CAP
+    unlimited = _report([_fail(offenders=many)], max_offenders=0).to_dict()["results"][0]
+    assert len(unlimited["offenders"]) == 120 and unlimited["offender_count"] == 120
+    assert _report([_fail(offenders=many)], max_offenders=3).to_dict()["results"][0]["offenders"] == [
+        "|m.f[0]", "|m.f[1]", "|m.f[2]"]
+    with pytest.raises(ValueError):
+        _report([_fail()], max_offenders=-1)
 
 
 def test_offenders_natural_order():
@@ -91,9 +105,9 @@ def test_result_is_immutable():
 
 # --- Report -------------------------------------------------------------------
 
-def _report(results, tool_error=None):
+def _report(results, tool_error=None, **kw):
     return Report(source_path="crate.fbx", source_sha256="ab" * 32,
-                  asset_class="prop_small", results=results, tool_error=tool_error)
+                  asset_class="prop_small", results=results, tool_error=tool_error, **kw)
 
 
 def test_status_pass_when_only_warnings_fail():
