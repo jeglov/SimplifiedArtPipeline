@@ -158,3 +158,13 @@ def test_unit_mismatch_in_the_written_file_fails(scenes, conventions, tmp_path):
     with pytest.raises(ExportError, match="UnitScaleFactor"):
         export_fbx(tmp_path / "SM_Clean.fbx", replace(conventions, linear_unit="m"))
     assert not (tmp_path / "SM_Clean.fbx").exists()  # nothing half-written left behind
+
+
+def test_fixed_multi_mesh_scene_is_byte_stable(scenes, validate, tmp_path):
+    # Maya saves "-na" set-member connections in varying order for multi-mesh
+    # scenes (probed); without validate.core.ma_canonical the fixed file and
+    # its report got a new sha256 on every run.
+    a = validate(scenes["SM_GroupNotFrozen"], "prop_small", fix_dir=tmp_path / "a")
+    b = validate(scenes["SM_GroupNotFrozen"], "prop_small", fix_dir=tmp_path / "b")
+    assert a.fixed_from is not None
+    assert a.source_sha256 == b.source_sha256

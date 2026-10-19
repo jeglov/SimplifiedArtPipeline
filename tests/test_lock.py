@@ -186,3 +186,16 @@ def test_bad_fbx_file_version_is_rejected(conv_copy):
 def test_fbx_settings_version_starts_at_one(conv_copy):
     # Boundary: 0 is invalid, 1 is the first valid version.
     assert "settings_version" in fbx_error(conv_copy, lambda d: d.__setitem__("settings_version", 0))
+
+
+# --- unity_import.yaml (Phase 2 step 4) ----------------------------------------------
+
+@pytest.mark.parametrize("root", ["Assets", "Art", "Assets/Art/", "assets/Art", "Assets\Art", "Assets//Art"])
+def test_bad_unity_root_is_rejected(conv_copy, root):
+    edit_yaml(conv_copy / "unity_import.yaml", lambda d: d.__setitem__("root", root))
+    with pytest.raises(conv.ConventionError, match="unity_import.root"):
+        conv.load(conv_copy)
+
+
+def test_unity_root_is_in_the_lock():
+    assert json.loads(lock.render())["unity_import"] == {"root": conv.load().unity_import.root}

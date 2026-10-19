@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/artpipe/artpipe/conventions/report.schema.json",
+  "title": "artpipe Maya validation report",
+  "description": "One report per validated file, written by `artpipe validate`. With --export, the exported FBX gets its own report (exported_from + export set). The Unity import gate reads these. Every report the test suite produces is validated against this schema.",
+  "$comment": "Bump schema_version in validate/core/result.py and the const below together. Consumers must branch on schema_version, never guess from the keys present.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tool", "source", "asset_class", "status", "tool_error",
+               "summary", "results", "fixes", "fixed_from", "exported_from", "export"],
+  "properties": {
+    "schema_version": { "const": "1.2" },
+    "tool": { "type": "string", "minLength": 1 },
+    "source": {
+      "description": "The file this report judges. sha256 is empty only when the file couldn't be read (status is then error).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256_or_empty" }
+      }
+    },
+    "asset_class": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "status": { "enum": ["pass", "fail", "error"] },
+    "tool_error": { "type": ["string", "null"] },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "passed", "errors", "warnings", "fixable", "fixes_applied"],
+      "properties": {
+        "total": { "$ref": "#/$defs/count" },
+        "passed": { "$ref": "#/$defs/count" },
+        "errors": { "$ref": "#/$defs/count" },
+        "warnings": { "$ref": "#/$defs/count" },
+        "fixable": { "$ref": "#/$defs/count" },
+        "fixes_applied": { "$ref": "#/$defs/count" }
+      }
+    },
+    "results": { "type": "array", "items": { "$ref": "#/$defs/check_result" } },
+    "fixes": { "type": "array", "items": { "$ref": "#/$defs/fix_result" } },
+    "fixed_from": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/file_ref" }] },
+    "exported_from": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/file_ref" }] },
+    "export": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["format", "settings_version", "file_version", "up_axis", "unit_scale_cm"],
+          "properties": {
+            "format": { "const": "fbx-ascii" },
+            "settings_version": { "type": "integer", "minimum": 1 },
+            "file_version": { "type": "string", "pattern": "^FBX20[0-9]{4}$" },
+            "up_axis": { "enum": ["x", "y", "z", "-x", "-y", "-z"] },
+            "unit_scale_cm": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      ]
+    }
+  },
+
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "check_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "sha256_or_empty": { "type": "string", "pattern": "^([0-9a-f]{64})?$" },
+    "file_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "check_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "passed", "severity", "message", "fixable", "metrics", "offenders", "offender_count"],
+      "properties": {
+        "id": { "$ref": "#/$defs/check_id" },
+        "passed": { "type": "boolean" },
+        "severity": { "enum": ["error", "warning", "info"] },
+        "message": { "type": "string" },
+        "fixable": { "type": "boolean" },
+        "metrics": { "type": "object" },
+        "offenders": { "type": "array", "items": { "type": "string" } },
+        "offender_count": { "$ref": "#/$defs/count" }
+      }
+    },
+    "fix_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "applied", "message", "changed", "changed_count"],
+      "properties": {
+        "id": { "$ref": "#/$defs/check_id" },
+        "applied": { "type": "boolean" },
+        "message": { "type": "string" },
+        "changed": { "type": "array", "items": { "type": "string" } },
+        "changed_count": { "$ref": "#/$defs/count" }
+      }
+    }
+  }
+}

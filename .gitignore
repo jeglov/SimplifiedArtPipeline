@@ -6,6 +6,8 @@ __pycache__/
 # Pipeline outputs: reports and fixed files are build artefacts, never source.
 out/
 *.report.json
+# ...except the golden reports the Unity tests import (artpipe unity-fixtures).
+!unity/Packages/com.artpipe.importer/Tests/Editor/Fixtures~/*.fbx.report.json
 
 # Maya side files
 incrementalSave/

@@ -5,7 +5,6 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
 using UnityEngine;
 
 namespace Artpipe
@@ -41,6 +40,7 @@ namespace Artpipe
         public TextureRules Textures { get; set; }
         public Dictionary<string, NameRule> Naming { get; set; }
         public FbxExportRules FbxExport { get; set; }
+        public UnityImportRules UnityImport { get; set; }
 
         /// <summary>
         /// The conventions folder: <c>ARTPIPE_CONVENTIONS_DIR</c> if set,
@@ -106,30 +106,8 @@ namespace Artpipe
                 return string.Concat(sha.ComputeHash(stream).Select(b => b.ToString("x2")));
         }
 
-        /// <summary>snake_case names, every member required, unknown members rejected.</summary>
-        public static readonly JsonSerializerSettings Settings = new JsonSerializerSettings
-        {
-            ContractResolver = new StrictSnakeCaseResolver(),
-            MissingMemberHandling = MissingMemberHandling.Error,
-            // Floats like 0.1 must come back as the exact double Python wrote.
-            FloatParseHandling = FloatParseHandling.Double,
-        };
-
-        sealed class StrictSnakeCaseResolver : DefaultContractResolver
-        {
-            public StrictSnakeCaseResolver()
-            {
-                // Dictionary keys (class names, map suffixes, file names) stay as written.
-                NamingStrategy = new SnakeCaseNamingStrategy { ProcessDictionaryKeys = false };
-            }
-
-            protected override JsonProperty CreateProperty(System.Reflection.MemberInfo member, MemberSerialization ms)
-            {
-                var p = base.CreateProperty(member, ms);
-                if (!p.Ignored) p.Required = Required.Always;  // missing key = error, never a silent default
-                return p;
-            }
-        }
+        /// <summary>Same strict rules as every other artpipe JSON file (StrictJson).</summary>
+        public static JsonSerializerSettings Settings => StrictJson.Settings;
     }
 
     public sealed class UnitRules
@@ -206,6 +184,16 @@ namespace Artpipe
         public string FileVersion { get; set; }
         public string UpAxis { get; set; }
         public Dictionary<string, bool> Flags { get; set; }
+    }
+
+    /// <summary>conventions/unity_import.yaml.</summary>
+    public sealed class UnityImportRules
+    {
+        /// <summary>The only folder the importer manages, e.g. "Assets/Art".</summary>
+        public string Root { get; set; }
+
+        public bool Manages(string assetPath) =>
+            assetPath != null && assetPath.StartsWith(Root + "/", StringComparison.Ordinal);
     }
 
     public sealed class NameRule

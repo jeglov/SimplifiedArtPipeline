@@ -1,0 +1,304 @@
+{
+  "asset_class": "env_module",
+  "export": {
+    "file_version": "FBX202000",
+    "format": "fbx-ascii",
+    "settings_version": 1,
+    "unit_scale_cm": 1.0,
+    "up_axis": "y"
+  },
+  "exported_from": {
+    "path": "out/unity_fixtures/scenes/SM_UVOutsideTiling.ma",
+    "sha256": "1e70cc3166772f783894212fbb8d0aa84baa0319e555be8debc3aa3660d7cf7b"
+  },
+  "fixed_from": null,
+  "fixes": [],
+  "results": [
+    {
+      "fixable": false,
+      "id": "scene.has_meshes",
+      "message": "1 mesh(es) found",
+      "metrics": {
+        "mesh_count": 1
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "topology.non_manifold",
+      "message": "no non-manifold geometry",
+      "metrics": {
+        "meshes_affected": 0,
+        "nonmanifold_edges": 0,
+        "nonmanifold_vertices": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": true,
+      "id": "topology.lamina_faces",
+      "message": "no lamina faces",
+      "metrics": {
+        "lamina_faces": 0,
+        "meshes_affected": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "topology.open_borders",
+      "message": "all meshes are watertight",
+      "metrics": {
+        "border_edges": 0,
+        "meshes_affected": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "warning"
+    },
+    {
+      "fixable": false,
+      "id": "topology.ngons",
+      "message": "no ngons",
+      "metrics": {
+        "max_sides": 0,
+        "meshes_affected": 0,
+        "ngons": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "budget.tris",
+      "message": "LOD0 has 12 tris, 0% of the env_module budget (2000)",
+      "metrics": {
+        "lod0_tris": 12,
+        "percent_of_budget": 0.6,
+        "total_tris_all_lods": 12,
+        "tris_max": 2000
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "budget.lods",
+      "message": "1 LOD level(s), all within budget",
+      "metrics": {
+        "levels": 1,
+        "lods_max": 2,
+        "lods_min": 1,
+        "max_tris_per_level": {},
+        "tris_per_level": {
+          "LOD0": 12
+        }
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "budget.materials",
+      "message": "all meshes within 1 material(s)",
+      "metrics": {
+        "materials_per_mesh": {
+          "|SM_UVOutsideTiling": [
+            "M_UVOutsideTiling"
+          ]
+        },
+        "max_found": 1,
+        "max_materials": 1,
+        "unassigned_faces": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": true,
+      "id": "uv.present",
+      "message": "all meshes have UV sets ['map1'] mapping every face",
+      "metrics": {
+        "meshes_missing_sets": 0,
+        "meshes_wrong_order": 0,
+        "required_sets": [
+          "map1"
+        ],
+        "unmapped_faces": 0,
+        "uv_sets_per_mesh": {
+          "|SM_UVOutsideTiling": [
+            "map1"
+          ]
+        }
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "uv.unit_square",
+      "message": "not required for env_module (tiling UVs allowed)",
+      "metrics": {
+        "required": false
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "uv.overlap",
+      "message": "no overlapping map1 faces",
+      "metrics": {
+        "meshes_affected": 0,
+        "meshes_skipped": 0,
+        "overlap_allowed": true,
+        "overlapping_faces": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "info"
+    },
+    {
+      "fixable": true,
+      "id": "scene.units",
+      "message": "not verifiable for FBX yet (backlog #4); transform.size still catches unit mistakes",
+      "metrics": {
+        "expected": "cm",
+        "verified": false
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "warning"
+    },
+    {
+      "fixable": true,
+      "id": "transform.frozen",
+      "message": "all 1 transform frozen",
+      "metrics": {
+        "negative_scale": 0,
+        "not_frozen": 0,
+        "transforms_checked": 1,
+        "values": {}
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": true,
+      "id": "transform.pivot",
+      "message": "pivots at origin, geometry placed for origin mode",
+      "metrics": {
+        "anchor_cm": null,
+        "anchor_offset_cm": 0.0,
+        "bbox_max_cm": [
+          30.0,
+          60.0,
+          30.0
+        ],
+        "bbox_min_cm": [
+          -30.0,
+          0.0,
+          -30.0
+        ],
+        "mode": "origin",
+        "pivots_off_origin": {},
+        "tolerance_cm": 0.5
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "transform.size",
+      "message": "largest dimension 60.0 cm, within 50-5000 cm for env_module",
+      "metrics": {
+        "dimensions_cm": [
+          60.0,
+          60.0,
+          60.0
+        ],
+        "largest_cm": 60.0,
+        "size_cm_max": 5000.0,
+        "size_cm_min": 50.0,
+        "unit_guess": null
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": true,
+      "id": "naming.convention",
+      "message": "names and hierarchy follow the convention",
+      "metrics": {
+        "file_stem": "SM_UVOutsideTiling",
+        "materials": [
+          "M_UVOutsideTiling"
+        ],
+        "problems": {}
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": true,
+      "id": "scene.history",
+      "message": "no construction history",
+      "metrics": {
+        "history_nodes": {},
+        "meshes_with_history": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    }
+  ],
+  "schema_version": "1.2",
+  "source": {
+    "path": "unity/Packages/com.artpipe.importer/Tests/Editor/Fixtures~/SM_UVOutsideTiling.fbx",
+    "sha256": "b968daea645728ce2de8077742b5cf5a682ace4641cebafdcc4eb28c2b02cc35"
+  },
+  "status": "pass",
+  "summary": {
+    "errors": 0,
+    "fixable": 0,
+    "fixes_applied": 0,
+    "passed": 17,
+    "total": 17,
+    "warnings": 0
+  },
+  "tool": "artpipe.validate.maya",
+  "tool_error": null
+}

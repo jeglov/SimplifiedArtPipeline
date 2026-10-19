@@ -7,7 +7,6 @@ with no commands in it.
 """
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 # File extension -> Maya file type name used by cmds.file(type=...).
@@ -62,17 +61,11 @@ def save_scene(path: Path) -> None:
     cmds.file(rename=path.resolve().as_posix())
     cmds.file(save=True, force=True, type=FILE_TYPES[ext])
     if ext == ".ma":
-        _strip_volatile_lines(path)
+        canonicalize_ma(path)
 
 
-# Lines Maya writes differently on EVERY save of the same scene: the save
-# time, a random file UUID, and fresh UUIDs for nodes Maya recreates each
-# session. Keeping them would give the fixed file (and so its report) a new
-# sha256 on every run. Maya regenerates UUIDs on load; no asset data is lost.
-_VOLATILE = re.compile(rb'^(//Last modified: .*|fileInfo "UUID" ".*";|\s*rename -uid ".*";)\r?\n',
-                       re.MULTILINE)
-
-
-def _strip_volatile_lines(path: Path) -> None:
-    data = path.read_bytes()
-    path.write_bytes(_VOLATILE.sub(b"", data))
+def canonicalize_ma(path: Path) -> None:
+    """Rewrite a saved .ma in place so the same scene always has the same bytes
+    (validate.core.ma_canonical)."""
+    from validate.core.ma_canonical import canonicalize_ma as canonical
+    path.write_bytes(canonical(path.read_bytes()))

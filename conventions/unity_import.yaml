@@ -1,0 +1,9 @@
+# artpipe Unity import settings (Phase 2). Read by the Unity package through
+# conventions.lock.json; never typed into C#.
+
+version: 1
+
+# The importer manages ONLY assets under this folder. Anything else (store
+# packages, plugins, prototypes) is left alone: a pipeline that touches
+# assets it doesn't own breaks other people's work.
+root: Assets/Art

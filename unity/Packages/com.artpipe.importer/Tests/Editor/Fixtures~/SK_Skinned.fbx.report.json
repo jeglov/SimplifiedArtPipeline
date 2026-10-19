@@ -1,0 +1,314 @@
+{
+  "asset_class": "character",
+  "export": {
+    "file_version": "FBX202000",
+    "format": "fbx-ascii",
+    "settings_version": 1,
+    "unit_scale_cm": 1.0,
+    "up_axis": "y"
+  },
+  "exported_from": {
+    "path": "out/unity_fixtures/scenes/SK_Skinned.ma",
+    "sha256": "59c283a1eefdf57ea4b565eb5c1dc36649ad3b2c2bffaeecec2aefc42549ca50"
+  },
+  "fixed_from": null,
+  "fixes": [],
+  "results": [
+    {
+      "fixable": false,
+      "id": "scene.has_meshes",
+      "message": "1 mesh(es) found",
+      "metrics": {
+        "mesh_count": 1
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "topology.non_manifold",
+      "message": "no non-manifold geometry",
+      "metrics": {
+        "meshes_affected": 0,
+        "nonmanifold_edges": 0,
+        "nonmanifold_vertices": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": true,
+      "id": "topology.lamina_faces",
+      "message": "no lamina faces",
+      "metrics": {
+        "lamina_faces": 0,
+        "meshes_affected": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "topology.open_borders",
+      "message": "all meshes are watertight",
+      "metrics": {
+        "border_edges": 0,
+        "meshes_affected": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "topology.ngons",
+      "message": "no ngons",
+      "metrics": {
+        "max_sides": 0,
+        "meshes_affected": 0,
+        "ngons": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "budget.tris",
+      "message": "LOD0 has 12 tris, 0% of the character budget (5000)",
+      "metrics": {
+        "lod0_tris": 12,
+        "percent_of_budget": 0.2,
+        "total_tris_all_lods": 12,
+        "tris_max": 5000
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "budget.lods",
+      "message": "1 LOD level(s), all within budget",
+      "metrics": {
+        "levels": 1,
+        "lods_max": 3,
+        "lods_min": 1,
+        "max_tris_per_level": {},
+        "tris_per_level": {
+          "LOD0": 12
+        }
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "budget.materials",
+      "message": "all meshes within 2 material(s)",
+      "metrics": {
+        "materials_per_mesh": {
+          "|SK_Skinned": [
+            "M_Skinned"
+          ]
+        },
+        "max_found": 1,
+        "max_materials": 2,
+        "unassigned_faces": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": true,
+      "id": "uv.present",
+      "message": "all meshes have UV sets ['map1'] mapping every face",
+      "metrics": {
+        "meshes_missing_sets": 0,
+        "meshes_wrong_order": 0,
+        "required_sets": [
+          "map1"
+        ],
+        "unmapped_faces": 0,
+        "uv_sets_per_mesh": {
+          "|SK_Skinned": [
+            "map1"
+          ]
+        }
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "uv.unit_square",
+      "message": "all map1 UVs inside 0-1",
+      "metrics": {
+        "faces_outside": 0,
+        "meshes_skipped": 0,
+        "required": true,
+        "u_max": 1.0,
+        "u_min": 0.0,
+        "v_max": 1.0,
+        "v_min": 0.0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "uv.overlap",
+      "message": "no overlapping map1 faces",
+      "metrics": {
+        "meshes_affected": 0,
+        "meshes_skipped": 0,
+        "overlap_allowed": true,
+        "overlapping_faces": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "info"
+    },
+    {
+      "fixable": true,
+      "id": "scene.units",
+      "message": "not verifiable for FBX yet (backlog #4); transform.size still catches unit mistakes",
+      "metrics": {
+        "expected": "cm",
+        "verified": false
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "warning"
+    },
+    {
+      "fixable": true,
+      "id": "transform.frozen",
+      "message": "all 1 transform frozen",
+      "metrics": {
+        "negative_scale": 0,
+        "not_frozen": 0,
+        "transforms_checked": 1,
+        "values": {}
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": true,
+      "id": "transform.pivot",
+      "message": "pivots at origin, geometry placed for bottom_center mode",
+      "metrics": {
+        "anchor_cm": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "anchor_offset_cm": 0.0,
+        "bbox_max_cm": [
+          30.0,
+          60.0,
+          30.0
+        ],
+        "bbox_min_cm": [
+          -30.0,
+          0.0,
+          -30.0
+        ],
+        "mode": "bottom_center",
+        "pivots_off_origin": {},
+        "tolerance_cm": 0.5
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": false,
+      "id": "transform.size",
+      "message": "largest dimension 60.0 cm, within 50-300 cm for character",
+      "metrics": {
+        "dimensions_cm": [
+          60.0,
+          60.0,
+          60.0
+        ],
+        "largest_cm": 60.0,
+        "size_cm_max": 300.0,
+        "size_cm_min": 50.0,
+        "unit_guess": null
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": true,
+      "id": "naming.convention",
+      "message": "names and hierarchy follow the convention",
+      "metrics": {
+        "file_stem": "SK_Skinned",
+        "materials": [
+          "M_Skinned"
+        ],
+        "problems": {}
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": true,
+      "id": "scene.history",
+      "message": "no construction history",
+      "metrics": {
+        "history_nodes": {},
+        "meshes_with_history": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    }
+  ],
+  "schema_version": "1.2",
+  "source": {
+    "path": "unity/Packages/com.artpipe.importer/Tests/Editor/Fixtures~/SK_Skinned.fbx",
+    "sha256": "07ba70938a3b18636cfcc1ed1c5917c55ea2e605eb3545cd74c0e98b979ae15c"
+  },
+  "status": "pass",
+  "summary": {
+    "errors": 0,
+    "fixable": 0,
+    "fixes_applied": 0,
+    "passed": 17,
+    "total": 17,
+    "warnings": 0
+  },
+  "tool": "artpipe.validate.maya",
+  "tool_error": null
+}

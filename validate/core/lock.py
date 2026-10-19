@@ -31,7 +31,8 @@ from validate.core import conventions as conv
 
 LOCK_VERSION = 1
 LOCK_NAME = "conventions.lock.json"
-SOURCES = ("fbx_export.yaml", "mesh_budgets.yaml", "naming.schema.json", "texture_rules.yaml")
+SOURCES = ("fbx_export.yaml", "mesh_budgets.yaml", "naming.schema.json", "texture_rules.yaml",
+           "unity_import.yaml")
 
 
 def _sha256(path: Path) -> str:
@@ -84,6 +85,7 @@ def build(c: conv.Conventions, conventions_dir: Path) -> Dict[str, Any]:
         "textures": textures,
         "naming": naming,
         "fbx_export": fbx_export,
+        "unity_import": {"root": c.unity_import.root},
     }
 
 

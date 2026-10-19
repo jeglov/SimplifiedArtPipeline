@@ -404,7 +404,8 @@
     "fbx_export.yaml": "cafff9a8508ff0ab0c4a3c0911028ee3f99f61836c0fbab725b70010456c8f4d",
     "mesh_budgets.yaml": "66fa8d8cc342bd7c744e7f97b6c4c77096d5f64342eca2e96f0af1e91f8cd7b5",
     "naming.schema.json": "796b030630d0a9b832b9815139301e0c825e862c52e8493e1b53707c4aed6e34",
-    "texture_rules.yaml": "ee87884e2ae05bc5b7939c232f21798129b820ae003ebca3d1a153efb0c43ecf"
+    "texture_rules.yaml": "ee87884e2ae05bc5b7939c232f21798129b820ae003ebca3d1a153efb0c43ecf",
+    "unity_import.yaml": "5061b9b9dc3abd7ef3b114e4242413a3e8a8745a4949339abe05c574b7ac6ff3"
   },
   "textures": {
     "min_size": 32,
@@ -482,5 +483,8 @@
   },
   "units": {
     "linear": "cm"
+  },
+  "unity_import": {
+    "root": "Assets/Art"
   }
 }

@@ -137,12 +137,19 @@ FBX_FLAGS = (
 
 
 @dataclass(frozen=True)
+class UnityImportRules:
+    """conventions/unity_import.yaml: how the Unity package imports assets."""
+    root: str  # e.g. "Assets/Art": the only folder the importer manages
+
+
+@dataclass(frozen=True)
 class Conventions:
     linear_unit: str
     classes: Tuple[AssetClass, ...]
     textures: TextureRules
     naming: NamingRules
     fbx_export: FbxExportRules
+    unity_import: UnityImportRules
 
     @property
     def class_names(self) -> Tuple[str, ...]:
@@ -384,6 +391,17 @@ def _parse_fbx_export(data: Dict[str, Any]) -> FbxExportRules:
     return FbxExportRules(settings_version, file_version, up_axis, flags)
 
 
+def _parse_unity_import(data: Dict[str, Any]) -> UnityImportRules:
+    r = _Reader(data, "unity_import")
+    r.get("version", int)
+    root = r.get("root", str)
+    r.done()
+    # Unity asset paths: forward slashes, under Assets/, no trailing slash.
+    if not re.match(r"^Assets(/[^/\\]+)+$", root):
+        raise ConventionError("unity_import.root: expected a folder like Assets/Art, got %r" % root)
+    return UnityImportRules(root=root)
+
+
 def load(conventions_dir: Optional[Path] = None) -> Conventions:
     """Load, validate and cross-check all convention files."""
     d = Path(conventions_dir) if conventions_dir else DEFAULT_DIR
@@ -393,6 +411,7 @@ def load(conventions_dir: Optional[Path] = None) -> Conventions:
 
     textures, tex_sizes = _parse_textures(_read_yaml(d / "texture_rules.yaml"))
     fbx_export = _parse_fbx_export(_read_yaml(d / "fbx_export.yaml"))
+    unity_import = _parse_unity_import(_read_yaml(d / "unity_import.yaml"))
 
     budgets = _read_yaml(d / "mesh_budgets.yaml")
     br = _Reader(budgets, "mesh_budgets")
@@ -425,4 +444,4 @@ def load(conventions_dir: Optional[Path] = None) -> Conventions:
                               % (sorted(schema_suffixes), sorted(rule_suffixes)))
 
     return Conventions(linear_unit=linear_unit, classes=classes, textures=textures, naming=naming,
-                       fbx_export=fbx_export)
+                       fbx_export=fbx_export, unity_import=unity_import)

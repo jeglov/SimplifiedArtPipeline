@@ -1,2 +1,7 @@
 pyyaml==6.0.2
 pytest==8.3.5
+# Report schema tests only. 4.17.3 is the last pure-Python jsonschema: later
+# versions need rpds-py, a Rust extension we'd have to build for mayapy.
+jsonschema==4.17.3
+attrs==26.1.0
+pyrsistent==0.20.0

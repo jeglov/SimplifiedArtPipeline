@@ -18,7 +18,6 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 12 | P2 | Skinned meshes have no checks: bone count, influences per vertex (mobile: 2–4), bind pose | `character` and `crowd_unit` classes exist but skinning isn't validated | Add a `skin.*` check family (Maya side) plus the Unity import setting `skinWeights` |
 | 13 | P2 | Texel density isn't checked | Mixed densities look inconsistent and waste memory | Add a `uv.texel_density` check with px/m targets per class in `mesh_budgets.yaml` |
 | 14 | P2 | `texture_rules.yaml` → `import_hints` isn't applied by anything yet (now typed, validated and resolved per map type into the lock, P2 step 2) | Data with no consumer drifts out of date | Consume it in the Unity texture presets/postprocessor |
-| 15 | P5 | There's no JSON Schema for the **report** itself | Agents and the Unity gate can't validate reports independently | Add `conventions/report.schema.json` and a test that every report validates against it |
 | 16 | P5 | No CI. Maya can't run on a hosted CI runner (license) | Regressions in core logic go unnoticed | GitHub Actions runs the pure-Python `validate.core` tests on stock Python. Maya tests run locally or on a licensed self-hosted runner |
 | 17 | P5 | Dependencies are installed with `pip --user` into `%APPDATA%\Python\Python39`, which is shared by every Python 3.9 | Can clash with other tools, and isn't reproducible on a farm | Vendor them into `third_party/` with `pip install --target`, and the wrapper script puts that folder on `PYTHONPATH` |
 | 18 | P5 | Only tested on Maya 2023 (Python 3.9). Maya 2025+ uses Python 3.11 | Studios run newer Maya | Test matrix on 2023 and 2025+ if available. Code stays 3.9-compatible |
@@ -35,11 +34,14 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 34 | P5 | Unity finds the rules at `../conventions/` (this repo's layout) or `ARTPIPE_CONVENTIONS_DIR` | 40 game projects won't sit next to this repo | Ship the lock with a versioned package or fetch it from a conventions service. The hash check already makes a stale copy fail loudly |
 | 35 | P3 | The FBX canonicalizer is probed on Maya 2023 / FBX SDK 2020.3.1 output only | FBX from Blender, other SDK versions or AI image-to-3D tools may lay out headers differently | Every unknown shape fails closed today (tool error, nothing shipped). In P3, add samples from each producer to the tests, or route them through Maya (import, validate, export) |
 | 36 | P2 | ASCII FBX is bigger and slower to parse than binary | Fine at mobile budgets (a 12-tri cube is 12 KB), but a 5k-tri character is unmeasured | Measure file size and Unity import time per class in step 5. Binary FBX would need a different determinism strategy (hash a canonical ASCII twin) |
+| 37 | P2 | The conventions custom dependency is registered on domain reload and by the CLI, not when a YAML file changes while the Editor is open | An artist editing rules in an open Editor sees old verdicts until the next script reload | The CLI always registers before importing (authoritative path). Optionally a FileSystemWatcher on conventions/ in P5 |
+| 38 | P5 | Sidecar reports are not signed: anyone can write a "pass" report with the right sha256 | The gate proves consistency, not provenance | Sign reports (HMAC with a pipeline secret, or Sigstore-style signatures) when agents from several teams write into one project |
 
 ## Done
 
 | # | Stage | Issue | Resolved in |
 |---|---|---|---|
+| 15 | P2 | No JSON Schema for the report | `conventions/report.schema.json`, enforced on every report the Maya suite writes (jsonschema 4.17.3, pure Python) and read strictly by the Unity gate (P2 step 4) |
 | 27 | P2 | `--fix` couldn't save fixed FBX inputs; Unity needs FBX in and FBX out | `--export DIR`: canonical ASCII FBX with explicit, read-back-verified settings (`conventions/fbx_export.yaml`), re-validated, with its own sha256-linked report. FBX inputs fix into a `.ma` working file (P2 step 3) |
 | 28 | P2 | A fixed `.mb` got a new sha256 on every run | Fixed outputs are always `.ma` (volatile lines stripped), and exported FBX is canonicalized (P2 step 3) |
 | 10 | P2 | Unity C# can't read YAML without an extra package | `artpipe conventions --dump` writes a resolved, hash-linked `conventions.lock.json`. Strict typed C# loader (Newtonsoft), stale lock = exit 2 in Unity and a failing test (P2 step 2) |

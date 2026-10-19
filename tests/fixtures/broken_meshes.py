@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 # file name (without .ma) -> (asset class, check ids that must FAIL on it).
 # Polygon counts: polyCube = 12 tris. polySphere(sx=n, sy=n) = 2n(n-2) + 2n tris:
@@ -556,6 +557,10 @@ def build_all(out_dir):
         path = os.path.abspath(os.path.join(out_dir, name + ".ma"))
         cmds.file(rename=path)
         cmds.file(save=True, type="mayaAscii")
+        # Same bytes on every build, so exported FBX reports that link back
+        # to these scenes by sha256 can be committed as golden files.
+        from validate.maya.session import canonicalize_ma
+        canonicalize_ma(Path(path))
         paths[name] = path
     return paths
 
