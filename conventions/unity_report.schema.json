@@ -36,13 +36,14 @@
     "asset": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "kind", "asset_class", "status", "imported", "source", "results"],
+      "required": ["path", "kind", "asset_class", "status", "imported", "prefab", "source", "results"],
       "properties": {
         "path": { "type": "string", "pattern": "^Assets/" },
         "kind": { "enum": ["model", "texture"] },
         "asset_class": { "type": ["string", "null"] },
         "status": { "enum": ["pass", "fail"] },
         "imported": { "type": "boolean", "description": "false when the gate refused the file before it entered the project" },
+        "prefab": { "type": ["string", "null"], "pattern": "^Assets/.*[.]prefab$", "description": "the Prefab Variant created for a clean model (import mode), else null" },
         "source": {
           "oneOf": [
             { "type": "null" },

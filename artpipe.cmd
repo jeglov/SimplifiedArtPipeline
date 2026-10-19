@@ -1,6 +1,7 @@
 @echo off
 rem artpipe: run pipeline commands under Maya's Python (mayapy).
 rem
+rem   artpipe build SCENE --class C [--texture T ...]   Maya validate/fix/export, then Unity import
 rem   artpipe validate FILE [FILE ...] --class prop_small [--out out] [--max-offenders N]
 rem   artpipe fixtures [OUT_DIR]          build the test scenes (default out\fixtures)
 rem   artpipe unity-fixtures              rebuild the golden FBX + reports for the Unity tests
@@ -48,6 +49,7 @@ shift
 goto collect
 
 :dispatch
+if /i "%CMD%"=="build" "%MAYAPY%" -m pipeline.build %ARGS% & goto done
 if /i "%CMD%"=="validate" "%MAYAPY%" -m validate.maya.cli %ARGS% & goto done
 if /i "%CMD%"=="fixtures" "%MAYAPY%" "%ROOT%\tests\fixtures\broken_meshes.py" %ARGS% & goto done
 if /i "%CMD%"=="unity-fixtures" "%MAYAPY%" "%ROOT%\tests\fixtures\unity_fixtures.py" %ARGS% & goto done
@@ -59,7 +61,7 @@ if /i "%CMD%"=="py" "%MAYAPY%" %ARGS% & goto done
 echo artpipe: unknown command "%CMD%" 1>&2
 
 :usage
-echo usage: artpipe validate^|fixtures^|unity-fixtures^|test^|docs^|conventions^|unity^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
+echo usage: artpipe build^|validate^|fixtures^|unity-fixtures^|test^|docs^|conventions^|unity^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
 exit /b 2
 
 :done

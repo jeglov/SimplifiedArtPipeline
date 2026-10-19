@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/artpipe/artpipe/conventions/build_report.schema.json",
+  "title": "artpipe build report",
+  "description": "Written by `artpipe build`: one asset from a Maya scene to a Unity prefab. Links each stage's own report (report.schema.json, unity_report.schema.json) by repo-relative path.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tool", "source", "asset_class", "textures", "status", "stopped_at", "stages", "exit_code"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "tool": { "type": "string", "minLength": 1 },
+    "source": { "$ref": "#/$defs/file" },
+    "asset_class": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "textures": { "type": "array", "items": { "$ref": "#/$defs/file" } },
+    "status": { "enum": ["pass", "fail", "error"] },
+    "stopped_at": { "enum": [null, "maya", "unity", "not_run"] },
+    "exit_code": { "enum": [0, 1, 2] },
+    "stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maya", "unity"],
+      "properties": {
+        "maya": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["exit_code", "status", "report", "fixes_applied", "fbx", "fbx_sha256", "fbx_report"],
+          "properties": {
+            "exit_code": { "enum": [0, 1, 2] },
+            "status": { "enum": ["pass", "fail", "error"] },
+            "report": { "type": ["string", "null"] },
+            "fixes_applied": { "type": "integer", "minimum": 0 },
+            "fbx": { "type": ["string", "null"] },
+            "fbx_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+            "fbx_report": { "type": ["string", "null"] }
+          }
+        },
+        "unity": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["exit_code", "status", "report", "asset", "prefab", "textures"],
+              "properties": {
+                "exit_code": { "enum": [0, 1, 2] },
+                "status": { "enum": ["pass", "fail", "error"] },
+                "report": { "type": ["string", "null"] },
+                "asset": { "type": ["string", "null"] },
+                "prefab": { "type": ["string", "null"] },
+                "textures": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

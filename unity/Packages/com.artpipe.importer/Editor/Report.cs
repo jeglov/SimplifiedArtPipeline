@@ -55,6 +55,7 @@ namespace Artpipe
         public bool Imported;        // false: refused before entering the project
         public string SourcePath;    // import mode: where it came from (repo-relative)
         public string SourceSha256;
+        public string Prefab;        // Prefab Variant of a clean model (import mode)
         public List<CheckResult> Results = new List<CheckResult>();
 
         public bool Passed => !Results.Any(r => r.Blocking);
@@ -66,6 +67,7 @@ namespace Artpipe
             ["asset_class"] = AssetClass,
             ["status"] = Passed ? "pass" : "fail",
             ["imported"] = Imported,
+            ["prefab"] = Prefab,
             ["source"] = SourcePath == null ? null : new Dictionary<string, object>
             {
                 ["path"] = SourcePath,

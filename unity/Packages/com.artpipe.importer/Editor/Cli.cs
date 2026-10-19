@@ -151,6 +151,18 @@ namespace Artpipe
                 entry.Imported = true;
                 entry.Results.AddRange(Checks(dest, entry.Kind, c));
             }
+
+            // A clean model gets its Prefab Variant: the asset game code references.
+            var newPrefabs = new List<string>();
+            foreach (var (_, dest, entry) in accepted.Where(a => a.entry.Kind == "model" && a.entry.Passed))
+            {
+                entry.Prefab = PrefabPath(dest);
+                if (EnsurePrefabVariant(dest)) newPrefabs.Add(entry.Prefab);
+            }
+            if (newPrefabs.Count(SetDeterministicGuid) > 0)
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            foreach (var (_, dest, entry) in accepted.Where(a => a.entry.Kind == "model" && a.entry.Passed))
+                entry.Results.Add(PrefabCheck(dest));
             return null;
         }
 
@@ -164,12 +176,18 @@ namespace Artpipe
                 var kind = KindOf(file);
                 if (kind == null) continue;
                 var folderClass = c.UnityImport.FolderClass(file);
-                report.Assets.Add(new AssetReport
+                var entry = new AssetReport
                 {
                     Path = file, Kind = kind, Imported = true,
                     AssetClass = c.Classes.ContainsKey(folderClass) ? folderClass : null,
                     Results = Checks(file, kind, c),
-                });
+                };
+                if (kind == "model" && !entry.Results.Any(r => r.Id.StartsWith("gate.") && r.Blocking))
+                {
+                    entry.Results.Add(PrefabCheck(file));
+                    if (File.Exists(PrefabPath(file))) entry.Prefab = PrefabPath(file);
+                }
+                report.Assets.Add(entry);
             }
         }
 
@@ -199,6 +217,74 @@ namespace Artpipe
             }
             gate.AddRange(ModelChecks.Run(go, c.Class(folderClass), assetPath));
             return gate;
+        }
+
+        /// <summary>The model's Prefab Variant exists, loads, and really derives from this model.</summary>
+        public static CheckResult PrefabCheck(string modelPath)
+        {
+            var path = PrefabPath(modelPath);
+            var r = new CheckResult { Id = "unity.prefab", Severity = Severity.Warning, Fixable = true };
+            if (!File.Exists(path))
+            {
+                r.Message = $"No {Path.GetFileName(path)}: game code should reference a Prefab Variant, not the FBX. `artpipe unity import` creates it.";
+                r.Offenders.Add(modelPath);
+                return r;
+            }
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
+            bool variant = prefab != null && PrefabUtility.GetPrefabAssetType(prefab) == PrefabAssetType.Variant
+                           && PrefabUtility.GetCorrespondingObjectFromSource(prefab) == model;
+            r.Passed = variant;
+            r.Severity = variant ? Severity.Warning : Severity.Error;
+            r.Fixable = false;
+            r.Message = variant ? $"{path} is a Prefab Variant of the model."
+                                : $"{path} exists but is not a Prefab Variant of {Path.GetFileName(modelPath)}.";
+            if (!variant) r.Offenders.Add(path);
+            return r;
+        }
+
+        public static string PrefabPath(string modelPath) => Path.ChangeExtension(modelPath, ".prefab").Replace('\\', '/');
+
+        /// <summary>
+        /// Create &lt;Name&gt;.prefab as a Prefab Variant of the imported model, once.
+        /// A variant follows every FBX reimport, and leaves room for gameplay
+        /// components (colliders, scripts) without touching the art. An existing
+        /// prefab is never overwritten: someone may have edited it.
+        /// </summary>
+        public static bool EnsurePrefabVariant(string modelPath)
+        {
+            var path = PrefabPath(modelPath);
+            if (File.Exists(path)) return false;
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(model);
+            try { PrefabUtility.SaveAsPrefabAsset(instance, path); }
+            finally { UnityEngine.Object.DestroyImmediate(instance); }
+            PinPrefabInstanceId(path);
+            return true;
+        }
+
+        static readonly System.Text.RegularExpressions.Regex ObjectHeader =
+            new System.Text.RegularExpressions.Regex("^--- !u!(\\d+) &(-?\\d+)", System.Text.RegularExpressions.RegexOptions.Multiline);
+
+        /// <summary>
+        /// Probed: a new Prefab Variant gets a random local file ID for its
+        /// PrefabInstance on every creation, so two machines write two different
+        /// files. In a fresh variant that ID is defined once and referenced
+        /// nowhere, so it is replaced with one derived from the path. Any other
+        /// layout is left untouched rather than guessed at.
+        /// </summary>
+        static void PinPrefabInstanceId(string path)
+        {
+            var text = File.ReadAllText(path);
+            var headers = ObjectHeader.Matches(text);
+            if (headers.Count != 1 || headers[0].Groups[1].Value != "1001") return;
+            var id = headers[0].Groups[2].Value;
+            if (text.Split(new[] { id }, StringSplitOptions.None).Length != 2) return;  // referenced elsewhere
+            long pinned;
+            using (var md5 = MD5.Create())
+                pinned = BitConverter.ToInt64(md5.ComputeHash(Encoding.UTF8.GetBytes("artpipe-prefab:" + path)), 0) & long.MaxValue;
+            if (pinned == 0) pinned = 1;
+            File.WriteAllText(path, text.Replace("&" + id, "&" + pinned), new UTF8Encoding(false));
         }
 
         static void CopyIfChanged(string src, string dest)

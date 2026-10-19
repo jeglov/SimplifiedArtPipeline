@@ -27,3 +27,7 @@ def pytest_collection_modifyitems(items):
     for item in items:
         if here in Path(str(item.fspath)).parents:
             item.add_marker(pytest.mark.unity)
+
+
+# Shared fixture, defined in unity_helpers (a unique module name: tests/integration has a conftest too).
+from unity_helpers import project_root_cleanup  # noqa: E402,F401
