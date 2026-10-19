@@ -9,10 +9,21 @@ from __future__ import annotations
 from typing import List, Tuple
 
 from validate.core.result import CheckResult
-from validate.maya.checks import scene_has_meshes
+from validate.maya.checks import (
+    scene_has_meshes,
+    topology_lamina_faces,
+    topology_ngons,
+    topology_non_manifold,
+    topology_open_borders,
+)
 
 CHECKS = (
     scene_has_meshes,
+    # topology
+    topology_non_manifold,
+    topology_lamina_faces,
+    topology_open_borders,
+    topology_ngons,
 )
 
 _REQUIRED = ("ID", "SEVERITY", "FIXABLE", "DESCRIPTION", "run")

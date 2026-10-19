@@ -47,6 +47,17 @@ EXIT_TOOL_ERROR = 2
 # They are public API (agent tool names), so their shape is validated.
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 
+_DIGITS = re.compile(r"(\d+)")
+
+
+def _natural_key(name: str) -> List[Any]:
+    """Sort key so "|m.e[3]" comes before "|m.e[10]" (plain sort puts e[10] first).
+
+    re.split with a capture group always alternates str, int, str..., so two
+    keys never compare an int with a str at the same position.
+    """
+    return [int(part) if part.isdigit() else part for part in _DIGITS.split(name)]
+
 
 class Severity(str, Enum):
     """How much a failed check matters.
@@ -132,7 +143,9 @@ class CheckResult:
         # Accept "error" as well as Severity.ERROR; reject typos like "err".
         object.__setattr__(self, "severity", Severity(self.severity))
 
-        unique = sorted({str(o) for o in self.offenders})
+        # Natural order: the cap then keeps the LOWEST component indices,
+        # which is what a human expects to see first.
+        unique = sorted({str(o) for o in self.offenders}, key=_natural_key)
         if self.passed and unique:
             # A passing check with offenders is a contradiction: it means the
             # check's pass/fail logic and its offender collection disagree.

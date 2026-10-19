@@ -57,7 +57,13 @@ def test_offenders_sorted_deduped_and_capped():
     r = _fail(offenders=many)
     assert r.offender_count == OFFENDER_CAP + 25  # total kept, duplicate removed
     assert len(r.offenders) == OFFENDER_CAP  # list capped
-    assert list(r.offenders) == sorted(r.offenders)
+    # Natural order, and the cap keeps the lowest indices.
+    assert list(r.offenders) == ["|m.f[%d]" % i for i in range(OFFENDER_CAP)]
+
+
+def test_offenders_natural_order():
+    r = _fail(offenders=["|m.e[10]", "|m.vtx[2]", "|m.e[3]", "|a.e[11]"])
+    assert list(r.offenders) == ["|a.e[11]", "|m.e[3]", "|m.e[10]", "|m.vtx[2]"]
 
 
 def test_passed_with_offenders_is_a_bug():
