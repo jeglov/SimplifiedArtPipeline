@@ -7,6 +7,7 @@ with no commands in it.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 # File extension -> Maya file type name used by cmds.file(type=...).
@@ -44,3 +45,35 @@ def open_scene(path: Path) -> None:
 
     cmds.file(new=True, force=True)
     cmds.file(path.resolve().as_posix(), **flags)
+
+
+def save_scene(path: Path) -> None:
+    """Save the current scene to `path` (.ma or .mb). Raises on failure."""
+    from maya import cmds
+
+    ext = path.suffix.lower()
+    if ext == ".fbx":
+        # FBX export needs explicit exporter settings (smoothing groups,
+        # tangents, embedded media...) that belong with the Unity import
+        # stage. Until then fixed files are saved as Maya scenes only.
+        raise ValueError("saving fixed FBX files isn't supported yet (backlog #27)")
+    if ext not in FILE_TYPES:
+        raise ValueError("unsupported file type %r" % ext)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cmds.file(rename=path.resolve().as_posix())
+    cmds.file(save=True, force=True, type=FILE_TYPES[ext])
+    if ext == ".ma":
+        _strip_volatile_lines(path)
+
+
+# Lines Maya writes differently on EVERY save of the same scene: the save
+# time, a random file UUID, and fresh UUIDs for nodes Maya recreates each
+# session. Keeping them would give the fixed file (and so its report) a new
+# sha256 on every run. Maya regenerates UUIDs on load; no asset data is lost.
+_VOLATILE = re.compile(rb'^(//Last modified: .*|fileInfo "UUID" ".*";|\s*rename -uid ".*";)\r?\n',
+                       re.MULTILINE)
+
+
+def _strip_volatile_lines(path: Path) -> None:
+    data = path.read_bytes()
+    path.write_bytes(_VOLATILE.sub(b"", data))

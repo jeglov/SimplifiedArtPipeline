@@ -15,7 +15,9 @@ from validate.core.result import (
     EXIT_PASS,
     EXIT_TOOL_ERROR,
     OFFENDER_CAP,
+    SCHEMA_VERSION,
     CheckResult,
+    FixResult,
     Report,
     Severity,
     Status,
@@ -155,6 +157,43 @@ def test_report_has_no_timestamp_fields():
 
 
 # --- Architecture guard ---------------------------------------------------------
+
+def test_fix_result_sorted_and_counted():
+    f = FixResult(id="topology.lamina_faces", applied=True, message="m",
+                  changed=["|m.f[10]", "|m.f[2]", "|m.f[2]"])
+    assert f.changed == ("|m.f[2]", "|m.f[10]") and f.changed_count == 2
+
+
+def test_skipped_fix_cannot_list_changes():
+    with pytest.raises(ValueError):
+        FixResult(id="scene.history", applied=False, message="skipped", changed=["|m"])
+
+
+def test_fix_id_must_be_a_check_id():
+    with pytest.raises(ValueError):
+        FixResult(id="history", applied=True, message="m")
+
+
+def test_report_carries_fixes():
+    fixes = [FixResult(id="scene.history", applied=True, message="baked", changed=["|m"]),
+             FixResult(id="topology.lamina_faces", applied=False, message="skipped: skinned")]
+    r = _report([_ok()], fixes=fixes, fixed_from={"path": "a.ma", "sha256": "cd" * 32}).to_dict()
+    assert r["schema_version"] == SCHEMA_VERSION == "1.1"
+    assert [f["id"] for f in r["fixes"]] == ["scene.history", "topology.lamina_faces"]
+    assert r["summary"]["fixes_applied"] == 1
+    assert r["fixed_from"]["path"] == "a.ma"
+
+
+def test_plain_report_has_empty_fix_fields():
+    r = _report([_ok()]).to_dict()
+    assert r["fixes"] == [] and r["fixed_from"] is None and r["summary"]["fixes_applied"] == 0
+
+
+def test_duplicate_fix_ids_rejected():
+    f = FixResult(id="scene.history", applied=True, message="m")
+    with pytest.raises(ValueError):
+        _report([_ok()], fixes=[f, f])
+
 
 def test_core_never_imports_maya():
     """validate.core must stay importable without Maya (fresh interpreter,

@@ -71,6 +71,12 @@ def materials(transform: str) -> List[str]:
     return sorted(material_faces(transform))
 
 
+def is_skinned(transform: str) -> bool:
+    """True if a skinCluster deforms the mesh."""
+    return bool(cmds.ls(cmds.listHistory(mesh_shape(transform), pruneDagObjects=True) or [],
+                        type="skinCluster"))
+
+
 def short_name(path: str) -> str:
     """"|SM_Crate|SM_Crate_LOD0" -> "SM_Crate_LOD0"."""
     return path.rsplit("|", 1)[-1]

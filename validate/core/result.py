@@ -25,7 +25,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 # Bump when the report shape changes so consumers can branch on it.
-SCHEMA_VERSION = "1.0"
+# 1.1: "fixes" and "fixed_from" (auto-fix mode), summary.fixes_applied.
+SCHEMA_VERSION = "1.1"
 
 # Default max offenders WRITTEN per check. A 50k-tri mesh with every face
 # ngon'd would otherwise produce a multi-MB report that is useless to a human
@@ -178,6 +179,42 @@ class CheckResult:
         }
 
 
+@dataclass(frozen=True)
+class FixResult:
+    """What one auto-fix did (or why it didn't). Immutable once built.
+
+    Example JSON:
+        {"id": "scene.history", "applied": true,
+         "message": "baked 1 construction history node on 1 mesh",
+         "changed": ["|SM_Crate"], "changed_count": 1}
+
+    `id` is the CHECK id the fix addresses, so an agent can pair it with
+    that check's result. applied=False means the fix was skipped on purpose
+    (the message says why, e.g. "mesh is skinned") - the asset was not touched.
+    """
+
+    id: str
+    applied: bool
+    message: str
+    # Nodes/components the fix modified, e.g. "|SM_Crate.f[3]".
+    changed: Sequence[str] = ()
+    changed_count: int = field(init=False, default=0)
+
+    def __post_init__(self) -> None:
+        if not _ID_PATTERN.match(self.id):
+            raise ValueError("fix id %r must be a check id like 'category.name'" % self.id)
+        unique = sorted({str(c) for c in self.changed}, key=_natural_key)
+        if not self.applied and unique:
+            raise ValueError("%s: applied=False but changes were listed" % self.id)
+        object.__setattr__(self, "changed_count", len(unique))
+        object.__setattr__(self, "changed", tuple(unique))
+
+    def to_dict(self, max_items: int = OFFENDER_CAP) -> Dict[str, Any]:
+        changed = self.changed[:max_items] if max_items else self.changed
+        return {"id": self.id, "applied": self.applied, "message": self.message,
+                "changed": list(changed), "changed_count": self.changed_count}
+
+
 @dataclass
 class Report:
     """Envelope around all check results for one source file.
@@ -201,15 +238,20 @@ class Report:
     tool: str = "artpipe.validate.maya"
     # Offenders written per check (0 = all). See OFFENDER_CAP.
     max_offenders: int = OFFENDER_CAP
+    # Auto-fix mode: what each fix did. `results` are then the re-validation
+    # of the FIXED file, and fixed_from is the original {"path", "sha256"}.
+    fixes: List[FixResult] = field(default_factory=list)
+    fixed_from: Optional[Dict[str, str]] = None
 
     def __post_init__(self) -> None:
         if self.max_offenders < 0:
             raise ValueError("max_offenders must be >= 0 (0 = unlimited)")
-        seen = set()
-        for r in self.results:
-            if r.id in seen:
-                raise ValueError("duplicate check id in report: %s" % r.id)
-            seen.add(r.id)
+        for kind, items in (("check", self.results), ("fix", self.fixes)):
+            seen = set()
+            for r in items:
+                if r.id in seen:
+                    raise ValueError("duplicate %s id in report: %s" % (kind, r.id))
+                seen.add(r.id)
 
     @property
     def status(self) -> Status:
@@ -236,6 +278,7 @@ class Report:
             "warnings": sum(1 for r in failed if r.severity is Severity.WARNING),
             # Failed checks an agent could auto-fix right now.
             "fixable": sum(1 for r in failed if r.fixable),
+            "fixes_applied": sum(1 for f in self.fixes if f.applied),
         }
 
     def to_dict(self) -> Dict[str, Any]:
@@ -248,6 +291,8 @@ class Report:
             "tool_error": self.tool_error,
             "summary": self.summary(),
             "results": [r.to_dict(self.max_offenders) for r in self.results],
+            "fixes": [f.to_dict(self.max_offenders) for f in self.fixes],
+            "fixed_from": self.fixed_from,
         }
 
     def to_json(self) -> str:

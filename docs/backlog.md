@@ -14,7 +14,6 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 1 | P5 | `mayapy` cold start is about 21 s per process | One process per asset means 100 assets ≈ 35 min of pure startup | The CLI accepts many files per run and writes one report per file. In P5, consider a persistent Maya worker behind the MCP server The CLI already validates many files per run; what's left is the persistent worker. |
 | 4 | P3 | For **FBX** inputs, the file's own unit and up-axis are lost: Maya converts FBX to the scene's preferences on open, so `scene.units` reports "not verifiable". For `.ma` the unit is stored, but up-axis isn't stored at all (it's a Maya preference) | A Z-up or metre-unit FBX isn't flagged by `scene.units` (`transform.size` still catches a 100x scale error) | Parse the FBX header `GlobalSettings` (`UnitScaleFactor`, `UpAxis`) before opening. Possibly a P3 need too: AI image-to-3D outputs (GLB/FBX) come in metres and often Z-up |
 | 6 | P5 | The asset class comes from a CLI argument | An agent or an artist can pass the wrong class | P2/P5: infer it from the folder (`Assets/Art/Props/Small/`) or an asset manifest, and keep the CLI flag as an override |
-| 8 | P1.4 | The report has no `fixes` section yet | Agents must see what was changed, not just the final state | Add `fixes[]` (id, applied, changed nodes) and bump `SCHEMA_VERSION` to 1.1 |
 | 9 | P1.5 | The smoke test was run by hand and isn't in the suite | Nothing guards against a Maya-side import regression | Add Maya integration tests with a session-scoped `maya.standalone` fixture |
 | 10 | P2 | Unity C# can't read YAML without an extra package (YamlDotNet) | The Phase 2 importer needs the same budgets as the validator | Add `python -m validate.core.conventions --dump` → `conventions.lock.json`, read in C# with Newtonsoft. YAML stays the human-authored source of truth |
 | 11 | P2 | Tri count is measured in Maya, but the GPU cost is the **vertex** count after UV-seam and hard-edge splits | A 500-tri mesh with many seams can have 3× the vertices | Measure post-import vertex count in the Unity AssetPostprocessor and add it to the budget |
@@ -30,11 +29,14 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 23 | P2 | Budgets are educated defaults, not measured on a device | A reviewer may ask "how did you pick 500 tris?" | Profile a test scene on a low-end Android device (Unity Profiler / Frame Debugger) and record the numbers in `docs/conventions.md` |
 | 25 | P1.3 | `uv.unit_square` tolerance is a fixed `1e-4` | Maya's own default cylinder overshoots to u = 1.0019, invisible at the texture sizes we ship | Consider a per-class tolerance of half a texel at `texture_max_size` (prop_small: 1/512) and keep the fixed epsilon as the floor |
 | 26 | P2 | Only UV0 is checked for overlap. A hand-authored UV1 (lightmap) must NOT overlap | Overlapping lightmap UVs bake light from one surface onto another | If UV1 exists, check it with overlap never allowed. Otherwise rely on Unity's "Generate Lightmap UVs" |
+| 27 | P2 | `--fix` can only save fixed `.ma`/`.mb` files. A fixed FBX input is refused | Unity imports FBX, so the agent loop needs FBX in and FBX out | Add FBX export with explicit, versioned exporter settings (smoothing groups, tangents, no cameras/lights) in the Unity import stage |
+| 28 | P2 | Volatile lines (save time, file and node UUIDs) are stripped only from `.ma`. A fixed `.mb` gets a new sha256 on every run | Breaks the byte-identical promise for binary scenes | Keep fixed outputs as `.ma` (or FBX, see #27), or hash a canonical export instead of the file bytes |
 
 ## Done
 
 | # | Stage | Issue | Resolved in |
 |---|---|---|---|
+| 8 | P1.4 | The report has no `fixes` section yet | `fixes[]`, `fixed_from`, `summary.fixes_applied`; `SCHEMA_VERSION` 1.1 (step 4.1) |
 | 2 | P1.3 | The Maya path `C:\Program Files\Autodesk\Maya2023\bin\mayapy.exe` is hardcoded in README and commands | `artpipe.cmd` wrapper: `MAYAPY` env or newest installed Maya (step 3.7) |
 | 3 | P1.3 | `source.path` in the report is echoed exactly as given | `validate.core.paths.report_path`: repo-relative POSIX paths (step 3.7) |
 | 7 | P1.3 | `OFFENDER_CAP = 50` is global | `--max-offenders N` (0 = all). The cap is applied on output, results keep every offender (step 3.7) |

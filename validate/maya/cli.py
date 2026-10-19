@@ -1,12 +1,14 @@
 """Command line entry point: validate one or more files, one JSON report each.
 
     mayapy -m validate.maya.cli FILE [FILE ...] --class prop_small [--out out] [--max-offenders N]
+                                [--fix [--fixed-dir out/fixed]]
     (or, from the repo root: artpipe validate FILE ... --class prop_small)
 
 Writes <out>/<file name>.report.json per input and prints one summary line
 per file. Exit code is the worst across files: 0 pass, 1 asset failed,
-2 tool error. Agents should read the report files, not stdout: Maya prints
-its own startup noise to stdout.
+2 tool error. With --fix, the report (and exit code) describe the FIXED
+file. Agents should read the report files, not stdout: Maya prints its own
+startup noise to stdout.
 """
 from __future__ import annotations
 
@@ -40,6 +42,10 @@ def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
     p.add_argument("--conventions", type=Path, default=None, help="conventions folder (default: repo's)")
     p.add_argument("--max-offenders", type=int, default=OFFENDER_CAP, metavar="N",
                    help="offenders written per check (default %d, 0 = all)" % OFFENDER_CAP)
+    p.add_argument("--fix", action="store_true",
+                   help="apply safe auto-fixes, save to --fixed-dir, re-validate the saved file")
+    p.add_argument("--fixed-dir", type=Path, default=Path("out") / "fixed",
+                   help="where fixed files are saved (default: out/fixed)")
     args = p.parse_args(argv)
     if args.max_offenders < 0:
         p.error("--max-offenders must be >= 0")
@@ -47,28 +53,60 @@ def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
 
 
 def validate_file(path: Path, conventions: Conventions, asset_class: AssetClass,
-                  max_offenders: int = OFFENDER_CAP) -> Report:
-    """Open one file and run all checks. Never raises: failures become tool_error."""
+                  max_offenders: int = OFFENDER_CAP, fix_dir: Optional[Path] = None) -> Report:
+    """Open one file and run all checks. Never raises: failures become tool_error.
+
+    With fix_dir: apply the safe fixes, save the result to fix_dir/<file name>
+    (the source is never overwritten), RE-OPEN the saved file and validate it
+    from scratch. The report then describes the fixed file, lists what each
+    fix did, and points back to the original in fixed_from.
+    """
     from validate.maya import context, registry, session
 
     # Repo-relative, forward slashes: same report on every machine (backlog #3).
     shown = report_path(path)
 
-    def report(digest, **kw):
-        return Report(shown, digest, asset_class.name, max_offenders=max_offenders, **kw)
+    def report(source, digest, **kw):
+        return Report(source, digest, asset_class.name, max_offenders=max_offenders, **kw)
 
     if not path.is_file():
-        return report("", tool_error="file not found: %s" % shown)
+        return report(shown, "", tool_error="file not found: %s" % shown)
 
     digest = sha256(path)
     try:
         session.open_scene(path)
         ctx = context.build(shown, conventions, asset_class)
     except Exception as exc:  # noqa: BLE001
-        return report(digest, tool_error="could not open file: %s: %s" % (type(exc).__name__, exc))
+        return report(shown, digest, tool_error="could not open file: %s: %s" % (type(exc).__name__, exc))
 
     results, errors = registry.run_all(ctx)
-    return report(digest, results=results, tool_error="; ".join(errors) or None)
+    if fix_dir is None or errors:
+        return report(shown, digest, results=results, tool_error="; ".join(errors) or None)
+
+    # --- fix mode -------------------------------------------------------------
+    fixes, errors = registry.apply_fixes(lambda: context.build(shown, conventions, asset_class))
+    if errors:  # a fix crashed: scene state unknown, save nothing
+        return report(shown, digest, results=results, fixes=fixes, tool_error="; ".join(errors))
+    if not any(f.applied for f in fixes):  # nothing changed: report the original as-is
+        return report(shown, digest, results=results, fixes=fixes)
+
+    fixed = fix_dir / path.name
+    if fixed.resolve() == path.resolve():
+        return report(shown, digest, results=results, fixes=fixes,
+                      tool_error="refusing to overwrite the source file: use another --fixed-dir")
+    fixed_shown = report_path(fixed)
+    try:
+        session.save_scene(fixed)
+        # Validate what was SAVED, not the scene in memory: proves the file on
+        # disk is fixed, and gives the report the new file's hash.
+        session.open_scene(fixed)
+        ctx = context.build(fixed_shown, conventions, asset_class)
+    except Exception as exc:  # noqa: BLE001
+        return report(shown, digest, results=results, fixes=fixes,
+                      tool_error="could not save/re-open fixed file: %s: %s" % (type(exc).__name__, exc))
+    results, errors = registry.run_all(ctx)
+    return report(fixed_shown, sha256(fixed), results=results, fixes=fixes,
+                  fixed_from={"path": shown, "sha256": digest}, tool_error="; ".join(errors) or None)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -97,7 +135,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.out.mkdir(parents=True, exist_ok=True)
         worst = 0
         for path in args.files:
-            report = validate_file(path, conventions, asset_class, args.max_offenders)
+            report = validate_file(path, conventions, asset_class, args.max_offenders,
+                                   args.fixed_dir if args.fix else None)
             # Full file name, not stem: SM_Crate.ma and SM_Crate.fbx must not
             # overwrite each other's report.
             out_file = args.out / (path.name + ".report.json")

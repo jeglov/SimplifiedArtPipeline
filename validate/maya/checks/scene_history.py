@@ -22,7 +22,7 @@ from validate.maya.meshes import mesh_shape, plural
 
 ID = "scene.history"
 SEVERITY = Severity.ERROR
-FIXABLE = False
+FIXABLE = True  # see validate/maya/fixes/scene_history.py
 DESCRIPTION = "Meshes have no construction (modelling) history; deformers are allowed."
 
 

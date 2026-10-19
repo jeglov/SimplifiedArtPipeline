@@ -13,7 +13,7 @@ from validate.maya.meshes import plural, poly_info
 
 ID = "topology.lamina_faces"
 SEVERITY = Severity.ERROR
-FIXABLE = False
+FIXABLE = True  # see validate/maya/fixes/topology_lamina_faces.py
 DESCRIPTION = "No duplicate faces that share all of their edges with another face."
 
 

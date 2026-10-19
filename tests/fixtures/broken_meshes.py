@@ -69,12 +69,15 @@ EXPECT = {
     "crate_final_v2": ("prop_small", ["naming.convention"]),     # the classic artist file name
     "SM_WithHistory": ("prop_small", ["scene.history"]),         # live polyTriangulate node
     "SK_Skinned": ("character", []),                             # skinCluster history is allowed
+    "SK_SkinnedHistory": ("character", ["scene.history"]),       # polyTriangulate UNDER a skinCluster
+    # Stacked faces also stack in UV (info). Fix is blocked: the mesh is skinned.
+    "SK_SkinnedLamina": ("character", ["topology.lamina_faces", "uv.overlap"]),
 }
 
 # Fixtures whose builder handles placement itself (see _conform).
 SELF_PLACED = {"SM_NotFrozen", "SM_GroupNotFrozen", "SM_GeoOffset", "SM_PivotMoved",
                "SM_PickupCentered", "SM_PickupOnGround", "SM_TooSmall", "SM_TooBig", "SM_Meters",
-               "SM_WithHistory", "SK_Skinned"}
+               "SM_WithHistory", "SK_Skinned", "SK_SkinnedHistory", "SK_SkinnedLamina"}
 
 
 def _merge(name, parts):
@@ -381,14 +384,36 @@ def build_with_history():
     cmds.polyTriangulate(mesh, constructionHistory=True)  # tris count unchanged: 12
 
 
-def build_skinned():
+def _skin(mesh):
+    """Two-joint skeleton (its own root, like a real rig) bound to `mesh`."""
     from maya import cmds
-    mesh = _merge("SK_Skinned", [_cube()])
-    _conform()
     cmds.select(clear=True)  # otherwise the joint is parented under the selection
     root = cmds.joint(name="root_JNT", position=(0, 0, 0))
     cmds.joint(name="top_JNT", position=(0, 60, 0))
     cmds.skinCluster(root, mesh, toSelectedBones=False)
+
+
+def build_skinned():
+    mesh = _merge("SK_Skinned", [_cube()])
+    _conform()
+    _skin(mesh)
+
+
+def build_skinned_history():
+    from maya import cmds
+    mesh = _merge("SK_SkinnedHistory", [_cube()])
+    _conform()
+    cmds.polyTriangulate(mesh, constructionHistory=True)  # modelling node upstream of the skin
+    _skin(mesh)
+
+
+def build_skinned_lamina():
+    from maya import cmds
+    q = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+    mesh = _merge("SK_SkinnedLamina", [cmds.polyCreateFacet(p=q, ch=False)[0],
+                                       cmds.polyCreateFacet(p=list(reversed(q)), ch=False)[0]])
+    _conform()
+    _skin(mesh)
 
 
 def _default_material(name):
@@ -442,6 +467,8 @@ BUILDERS = {
     "crate_final_v2": build_bad_file_name,
     "SM_WithHistory": build_with_history,
     "SK_Skinned": build_skinned,
+    "SK_SkinnedHistory": build_skinned_history,
+    "SK_SkinnedLamina": build_skinned_lamina,
 }
 assert set(BUILDERS) == set(EXPECT), "every fixture needs an expectation"
 
