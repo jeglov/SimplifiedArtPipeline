@@ -178,7 +178,7 @@ def test_report_carries_fixes():
     fixes = [FixResult(id="scene.history", applied=True, message="baked", changed=["|m"]),
              FixResult(id="topology.lamina_faces", applied=False, message="skipped: skinned")]
     r = _report([_ok()], fixes=fixes, fixed_from={"path": "a.ma", "sha256": "cd" * 32}).to_dict()
-    assert r["schema_version"] == SCHEMA_VERSION == "1.1"
+    assert r["schema_version"] == SCHEMA_VERSION == "1.2"
     assert [f["id"] for f in r["fixes"]] == ["scene.history", "topology.lamina_faces"]
     assert r["summary"]["fixes_applied"] == 1
     assert r["fixed_from"]["path"] == "a.ma"
@@ -187,6 +187,7 @@ def test_report_carries_fixes():
 def test_plain_report_has_empty_fix_fields():
     r = _report([_ok()]).to_dict()
     assert r["fixes"] == [] and r["fixed_from"] is None and r["summary"]["fixes_applied"] == 0
+    assert r["exported_from"] is None and r["export"] is None
 
 
 def test_duplicate_fix_ids_rejected():

@@ -1,0 +1,60 @@
+# artpipe FBX export settings: how a validated Maya scene becomes the FBX
+# Unity imports (Phase 2). Every value is applied explicitly after
+# FBXResetExport, then read back and verified, so nothing is inherited from
+# an artist's saved exporter preferences.
+#
+# Bump settings_version whenever any value changes. Every exported report
+# records it, so a reader knows exactly how a given FBX was produced.
+
+version: 1
+settings_version: 1
+
+# FBX 2020 (file format 7.7), the newest Maya 2023 writes; Unity 6 reads it.
+file_version: FBX202000
+
+# ASCII, not binary: its volatile fields (timestamps, absolute paths,
+# memory-address object IDs) can be canonicalized, so the same scene always
+# exports to the same bytes (validate/core/fbx_ascii.py). Binary FBX can't be
+# rewritten safely. The cost is file size and parse time, small at mobile
+# triangle budgets.
+ascii: true
+
+up_axis: y
+
+# Triangulate in Maya, so the engine, the normal-map baker and the
+# validator all see the same triangles. Left to Unity, quads are split by
+# Unity's own rule, and a normal map baked on a different split shades wrong.
+triangulate: true
+
+# Hard/soft edges travel as smoothing groups. hard_edges would split the
+# vertices in Maya; Unity does that itself when it builds the GPU mesh,
+# and counts the result (vertex budget, step 5).
+smoothing_groups: true
+hard_edges: false
+
+# Unity computes tangents (MikkTSpace), matching what bakers like
+# Substance assume. Exported tangents would be thrown away anyway.
+tangents: false
+
+# Smooth Mesh Preview (the "3" key in Maya) must never reach the engine.
+smooth_mesh: false
+
+# Skin weights for SK_ classes. Blend shapes aren't part of the conventions yet.
+skins: true
+blend_shapes: false
+
+# After FBXResetExport these default to ON: a "default" export would put a
+# camera, lights and Maya's input connections into every asset.
+cameras: false
+lights: false
+constraints: false
+input_connections: false
+skeleton_definitions: false
+instances: false
+referenced_assets_content: false
+
+# Textures are imported separately (texture rules), never embedded.
+embed_textures: false
+
+# Static assets carry no animation. Animated assets are out of scope for now.
+animation: false

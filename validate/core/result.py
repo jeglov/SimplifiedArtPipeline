@@ -26,7 +26,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 # Bump when the report shape changes so consumers can branch on it.
 # 1.1: "fixes" and "fixed_from" (auto-fix mode), summary.fixes_applied.
-SCHEMA_VERSION = "1.1"
+# 1.2: "exported_from" and "export" (FBX export mode, Phase 2).
+SCHEMA_VERSION = "1.2"
 
 # Default max offenders WRITTEN per check. A 50k-tri mesh with every face
 # ngon'd would otherwise produce a multi-MB report that is useless to a human
@@ -242,6 +243,12 @@ class Report:
     # of the FIXED file, and fixed_from is the original {"path", "sha256"}.
     fixes: List[FixResult] = field(default_factory=list)
     fixed_from: Optional[Dict[str, str]] = None
+    # Export mode: this report validates an EXPORTED FBX. exported_from is
+    # the validated scene it came from {"path", "sha256"}, and export holds
+    # how it was written (settings_version, plus facts read from the file).
+    # The Unity import gate trusts an FBX only through this link.
+    exported_from: Optional[Dict[str, str]] = None
+    export: Optional[Dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if self.max_offenders < 0:
@@ -293,6 +300,8 @@ class Report:
             "results": [r.to_dict(self.max_offenders) for r in self.results],
             "fixes": [f.to_dict(self.max_offenders) for f in self.fixes],
             "fixed_from": self.fixed_from,
+            "exported_from": self.exported_from,
+            "export": self.export,
         }
 
     def to_json(self) -> str:

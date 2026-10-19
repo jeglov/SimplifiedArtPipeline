@@ -1,7 +1,7 @@
 """Command line entry point: validate one or more files, one JSON report each.
 
     mayapy -m validate.maya.cli FILE [FILE ...] --class prop_small [--out out] [--max-offenders N]
-                                [--fix [--fixed-dir out/fixed]]
+                                [--fix [--fixed-dir out/fixed]] [--export DIR]
     (or, from the repo root: artpipe validate FILE ... --class prop_small)
 
 Writes <out>/<file name>.report.json per input and prints one summary line
@@ -9,6 +9,13 @@ per file. Exit code is the worst across files: 0 pass, 1 asset failed,
 2 tool error. With --fix, the report (and exit code) describe the FIXED
 file. Agents should read the report files, not stdout: Maya prints its own
 startup noise to stdout.
+
+With --export DIR, every file that PASSES is exported to DIR/<stem>.fbx as
+canonical ASCII FBX (conventions/fbx_export.yaml), re-opened and validated
+again, and that FBX's own report is written next to it as
+DIR/<stem>.fbx.report.json. Its source.sha256 is the FBX's hash and
+exported_from links back to the validated scene: this pair is what the
+Unity import gate trusts. Failed assets are never exported.
 """
 from __future__ import annotations
 
@@ -46,6 +53,8 @@ def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
                    help="apply safe auto-fixes, save to --fixed-dir, re-validate the saved file")
     p.add_argument("--fixed-dir", type=Path, default=Path("out") / "fixed",
                    help="where fixed files are saved (default: out/fixed)")
+    p.add_argument("--export", type=Path, default=None, metavar="DIR",
+                   help="export each passing file to DIR/<stem>.fbx + DIR/<stem>.fbx.report.json")
     args = p.parse_args(argv)
     if args.max_offenders < 0:
         p.error("--max-offenders must be >= 0")
@@ -90,7 +99,9 @@ def validate_file(path: Path, conventions: Conventions, asset_class: AssetClass,
     if not any(f.applied for f in fixes):  # nothing changed: report the original as-is
         return report(shown, digest, results=results, fixes=fixes)
 
-    fixed = fix_dir / path.name
+    # Always .ma: an FBX can't be re-saved as FBX before export (backlog #27),
+    # and .mb would get a new hash on every save (backlog #28).
+    fixed = fix_dir / (path.stem + ".ma")
     if fixed.resolve() == path.resolve():
         return report(shown, digest, results=results, fixes=fixes,
                       tool_error="refusing to overwrite the source file: use another --fixed-dir")
@@ -107,6 +118,63 @@ def validate_file(path: Path, conventions: Conventions, asset_class: AssetClass,
     results, errors = registry.run_all(ctx)
     return report(fixed_shown, sha256(fixed), results=results, fixes=fixes,
                   fixed_from={"path": shown, "sha256": digest}, tool_error="; ".join(errors) or None)
+
+
+def validated_file(path: Path, report: Report, fix_dir: Optional[Path]) -> Path:
+    """The file a report's verdict is about: the fixed copy if fixes applied."""
+    return fix_dir / (path.stem + ".ma") if report.fixed_from is not None and fix_dir else path
+
+
+def export_file(path: Path, validated_report: Report, conventions: Conventions,
+                asset_class: AssetClass, export_dir: Path,
+                max_offenders: int = OFFENDER_CAP) -> Report:
+    """Export a validated scene to FBX and validate the FBX itself.
+
+    `path` must be the file `validated_report` describes, and the report must
+    pass. Never raises: failures become tool_error on the FBX's report.
+    """
+    from validate.maya import context, export, registry, session
+
+    fbx = export_dir / (path.stem + ".fbx")
+    fbx_shown = report_path(fbx)
+    origin = {"path": validated_report.source_path, "sha256": validated_report.source_sha256}
+
+    def report(digest, **kw):
+        return Report(fbx_shown, digest, asset_class.name, max_offenders=max_offenders,
+                      exported_from=origin, **kw)
+
+    if validated_report.exit_code != 0:
+        return report("", tool_error="refusing to export: the source did not pass validation")
+    if fbx.resolve() == path.resolve():
+        return report("", tool_error="refusing to overwrite the source file: use another --export folder")
+    try:
+        session.open_scene(path)
+        info = export.export_fbx(fbx, conventions)
+        # Validate what was WRITTEN: proves the FBX still passes after the
+        # exporter's own changes (triangulation, unit and axis conversion).
+        session.open_scene(fbx)
+        ctx = context.build(fbx_shown, conventions, asset_class)
+    except Exception as exc:  # noqa: BLE001
+        return report(sha256(fbx) if fbx.is_file() else "",
+                      tool_error="FBX export failed: %s: %s" % (type(exc).__name__, exc))
+    results, errors = registry.run_all(ctx)
+    rules = conventions.fbx_export
+    return report(sha256(fbx), results=results, tool_error="; ".join(errors) or None, export={
+        "format": "fbx-ascii",
+        "settings_version": rules.settings_version,
+        "file_version": rules.file_version,
+        "up_axis": info.up_axis,
+        "unit_scale_cm": info.unit_scale_cm,
+    })
+
+
+def write_report(report: Report, out_file: Path) -> None:
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    # newline="\n": identical bytes on Windows and Linux.
+    with out_file.open("w", encoding="utf-8", newline="\n") as fh:
+        fh.write(report.to_json())
+    print("%-5s %s %s" % (report.status.value.upper(), out_file,
+                          json.dumps(report.summary(), sort_keys=True)))
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -135,17 +203,21 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.out.mkdir(parents=True, exist_ok=True)
         worst = 0
         for path in args.files:
-            report = validate_file(path, conventions, asset_class, args.max_offenders,
-                                   args.fixed_dir if args.fix else None)
+            fix_dir = args.fixed_dir if args.fix else None
+            report = validate_file(path, conventions, asset_class, args.max_offenders, fix_dir)
             # Full file name, not stem: SM_Crate.ma and SM_Crate.fbx must not
             # overwrite each other's report.
-            out_file = args.out / (path.name + ".report.json")
-            # newline="\n": identical bytes on Windows and Linux.
-            with out_file.open("w", encoding="utf-8", newline="\n") as fh:
-                fh.write(report.to_json())
-            print("%-5s %s %s" % (report.status.value.upper(), out_file,
-                                  json.dumps(report.summary(), sort_keys=True)))
+            write_report(report, args.out / (path.name + ".report.json"))
             worst = max(worst, report.exit_code)
+            if args.export is None:
+                continue
+            if report.exit_code != 0:
+                print("SKIP  export of %s: it did not pass" % path.name)
+                continue
+            exported = export_file(validated_file(path, report, fix_dir), report, conventions,
+                                   asset_class, args.export, args.max_offenders)
+            write_report(exported, args.export / (path.stem + ".fbx.report.json"))
+            worst = max(worst, exported.exit_code)
         return worst
     finally:
         session.stop()

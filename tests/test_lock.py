@@ -148,3 +148,41 @@ def test_missing_platform_default_is_rejected(conv_copy):
 def test_unknown_hint_key_is_rejected(conv_copy):
     msg = hints_error(conv_copy, lambda h: h.__setitem__("mipmap", True))  # typo of mipmaps
     assert "unknown key" in msg
+
+
+# --- fbx_export.yaml (Phase 2 step 3) -------------------------------------------------
+
+def fbx_error(conv_copy, change) -> str:
+    edit_yaml(conv_copy / "fbx_export.yaml", change)
+    with pytest.raises(conv.ConventionError) as exc:
+        conv.load(conv_copy)
+    return str(exc.value)
+
+
+def test_fbx_export_is_in_the_lock():
+    f = json.loads(lock.render())["fbx_export"]
+    c = conv.load().fbx_export
+    assert f["settings_version"] == c.settings_version
+    assert sorted(f["flags"]) == sorted(conv.FBX_FLAGS)
+
+
+def test_binary_fbx_export_is_rejected(conv_copy):
+    assert "must be true" in fbx_error(conv_copy, lambda d: d.__setitem__("ascii", False))
+
+
+def test_every_fbx_flag_is_required(conv_copy):
+    # Adding an exporter setting without deciding its value is a load error.
+    assert "cameras: missing required key" in fbx_error(conv_copy, lambda d: d.pop("cameras"))
+
+
+def test_unknown_fbx_setting_is_rejected(conv_copy):
+    assert "unknown key" in fbx_error(conv_copy, lambda d: d.__setitem__("camera", False))
+
+
+def test_bad_fbx_file_version_is_rejected(conv_copy):
+    assert "file_version" in fbx_error(conv_copy, lambda d: d.__setitem__("file_version", "7.7"))
+
+
+def test_fbx_settings_version_starts_at_one(conv_copy):
+    # Boundary: 0 is invalid, 1 is the first valid version.
+    assert "settings_version" in fbx_error(conv_copy, lambda d: d.__setitem__("settings_version", 0))

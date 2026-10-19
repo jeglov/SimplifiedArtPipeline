@@ -53,10 +53,9 @@ def save_scene(path: Path) -> None:
 
     ext = path.suffix.lower()
     if ext == ".fbx":
-        # FBX export needs explicit exporter settings (smoothing groups,
-        # tangents, embedded media...) that belong with the Unity import
-        # stage. Until then fixed files are saved as Maya scenes only.
-        raise ValueError("saving fixed FBX files isn't supported yet (backlog #27)")
+        # FBX is written by validate.maya.export (explicit, verified,
+        # canonical settings), never by a plain save.
+        raise ValueError("save .ma/.mb only; FBX goes through validate.maya.export")
     if ext not in FILE_TYPES:
         raise ValueError("unsupported file type %r" % ext)
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -68,7 +68,7 @@ installed Maya.
 
 | Command | Does |
 |---|---|
-| `artpipe validate FILE... --class C [--fix] [--max-offenders N]` | validate (and fix) one or more `.ma` / `.mb` / `.fbx` files |
+| `artpipe validate FILE... --class C [--fix] [--export DIR] [--max-offenders N]` | validate (and fix) one or more `.ma` / `.mb` / `.fbx` files; `--export` writes each passing asset as deterministic FBX plus its own linked report |
 | `artpipe fixtures [DIR]` | build the deliberately broken test scenes |
 | `artpipe test [-m "not maya"]` | full suite, or the pure-Python core only (<1 s, no Maya needed) |
 | `artpipe docs [--check]` | regenerate the tables in `docs/conventions.md` |

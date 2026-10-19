@@ -31,7 +31,7 @@ from validate.core import conventions as conv
 
 LOCK_VERSION = 1
 LOCK_NAME = "conventions.lock.json"
-SOURCES = ("mesh_budgets.yaml", "naming.schema.json", "texture_rules.yaml")
+SOURCES = ("fbx_export.yaml", "mesh_budgets.yaml", "naming.schema.json", "texture_rules.yaml")
 
 
 def _sha256(path: Path) -> str:
@@ -72,6 +72,9 @@ def build(c: conv.Conventions, conventions_dir: Path) -> Dict[str, Any]:
         r = c.naming.rule(kind)
         naming[kind] = {"pattern": r.pattern.pattern, "description": r.description,
                         "examples": list(r.examples), "invalid_examples": list(r.invalid_examples)}
+    f = c.fbx_export
+    fbx_export = {"settings_version": f.settings_version, "file_version": f.file_version,
+                  "up_axis": f.up_axis, "flags": dict(f.flags)}
     return {
         "lock_version": LOCK_VERSION,
         "generated_by": "artpipe conventions --dump",
@@ -80,6 +83,7 @@ def build(c: conv.Conventions, conventions_dir: Path) -> Dict[str, Any]:
         "classes": classes,
         "textures": textures,
         "naming": naming,
+        "fbx_export": fbx_export,
     }
 
 

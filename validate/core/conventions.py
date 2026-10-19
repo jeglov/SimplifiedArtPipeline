@@ -115,11 +115,34 @@ class TextureRules:
 
 
 @dataclass(frozen=True)
+class FbxExportRules:
+    """conventions/fbx_export.yaml. `flags` holds every on/off exporter setting,
+    sorted by name, so consumers can't silently miss a new one."""
+    settings_version: int
+    file_version: str
+    up_axis: str
+    flags: Tuple[Tuple[str, bool], ...]
+
+    def flag(self, name: str) -> bool:
+        return dict(self.flags)[name]
+
+
+# Every boolean in fbx_export.yaml. Required, so adding a setting to the
+# Maya exporter without deciding its value here is a load error.
+FBX_FLAGS = (
+    "animation", "ascii", "blend_shapes", "cameras", "constraints", "embed_textures",
+    "hard_edges", "input_connections", "instances", "lights", "referenced_assets_content",
+    "skeleton_definitions", "skins", "smooth_mesh", "smoothing_groups", "tangents", "triangulate",
+)
+
+
+@dataclass(frozen=True)
 class Conventions:
     linear_unit: str
     classes: Tuple[AssetClass, ...]
     textures: TextureRules
     naming: NamingRules
+    fbx_export: FbxExportRules
 
     @property
     def class_names(self) -> Tuple[str, ...]:
@@ -340,6 +363,27 @@ def _parse_textures(data: Dict[str, Any]) -> Tuple[TextureRules, Dict[str, int]]
     return rules, sizes
 
 
+def _parse_fbx_export(data: Dict[str, Any]) -> FbxExportRules:
+    r = _Reader(data, "fbx_export")
+    r.get("version", int)
+    settings_version = r.get("settings_version", int)
+    if settings_version < 1:
+        raise ConventionError("fbx_export.settings_version: must be >= 1")
+    file_version = r.get("file_version", str)
+    if not re.match(r"^FBX20[0-9]{4}$", file_version):
+        raise ConventionError("fbx_export.file_version: expected e.g. FBX202000, got %r" % file_version)
+    up_axis = r.get("up_axis", str)
+    if up_axis not in ("y", "z"):
+        raise ConventionError("fbx_export.up_axis: must be y or z")
+    flags = tuple((name, r.get(name, bool)) for name in FBX_FLAGS)
+    r.done()
+    if not dict(flags)["ascii"]:
+        # The canonicalizer only understands ASCII: binary output would make
+        # every export unique and leak absolute paths.
+        raise ConventionError("fbx_export.ascii: must be true (deterministic export needs ASCII FBX)")
+    return FbxExportRules(settings_version, file_version, up_axis, flags)
+
+
 def load(conventions_dir: Optional[Path] = None) -> Conventions:
     """Load, validate and cross-check all convention files."""
     d = Path(conventions_dir) if conventions_dir else DEFAULT_DIR
@@ -348,6 +392,7 @@ def load(conventions_dir: Optional[Path] = None) -> Conventions:
         naming = NamingRules(json.load(fh))
 
     textures, tex_sizes = _parse_textures(_read_yaml(d / "texture_rules.yaml"))
+    fbx_export = _parse_fbx_export(_read_yaml(d / "fbx_export.yaml"))
 
     budgets = _read_yaml(d / "mesh_budgets.yaml")
     br = _Reader(budgets, "mesh_budgets")
@@ -379,4 +424,5 @@ def load(conventions_dir: Optional[Path] = None) -> Conventions:
         raise ConventionError("texture suffixes differ: naming.schema.json %s vs texture_rules.yaml %s"
                               % (sorted(schema_suffixes), sorted(rule_suffixes)))
 
-    return Conventions(linear_unit=linear_unit, classes=classes, textures=textures, naming=naming)
+    return Conventions(linear_unit=linear_unit, classes=classes, textures=textures, naming=naming,
+                       fbx_export=fbx_export)

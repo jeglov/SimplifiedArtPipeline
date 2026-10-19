@@ -40,6 +40,7 @@ namespace Artpipe
         public Dictionary<string, AssetClass> Classes { get; set; }
         public TextureRules Textures { get; set; }
         public Dictionary<string, NameRule> Naming { get; set; }
+        public FbxExportRules FbxExport { get; set; }
 
         /// <summary>
         /// The conventions folder: <c>ARTPIPE_CONVENTIONS_DIR</c> if set,
@@ -195,6 +196,16 @@ namespace Artpipe
         public Dictionary<string, string> Channels { get; set; }
         /// <summary>{platform: format}, e.g. {"android": "ASTC_4x4"}, overrides already applied.</summary>
         public Dictionary<string, string> Formats { get; set; }
+    }
+
+    /// <summary>How Maya exported the FBX (conventions/fbx_export.yaml).</summary>
+    public sealed class FbxExportRules
+    {
+        /// <summary>Recorded in every exported report; the import gate compares it.</summary>
+        public int SettingsVersion { get; set; }
+        public string FileVersion { get; set; }
+        public string UpAxis { get; set; }
+        public Dictionary<string, bool> Flags { get; set; }
     }
 
     public sealed class NameRule

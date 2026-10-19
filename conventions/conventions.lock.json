@@ -291,6 +291,30 @@
       }
     }
   },
+  "fbx_export": {
+    "file_version": "FBX202000",
+    "flags": {
+      "animation": false,
+      "ascii": true,
+      "blend_shapes": false,
+      "cameras": false,
+      "constraints": false,
+      "embed_textures": false,
+      "hard_edges": false,
+      "input_connections": false,
+      "instances": false,
+      "lights": false,
+      "referenced_assets_content": false,
+      "skeleton_definitions": false,
+      "skins": true,
+      "smooth_mesh": false,
+      "smoothing_groups": true,
+      "tangents": false,
+      "triangulate": true
+    },
+    "settings_version": 1,
+    "up_axis": "y"
+  },
   "generated_by": "artpipe conventions --dump",
   "lock_version": 1,
   "naming": {
@@ -377,6 +401,7 @@
     }
   },
   "sources": {
+    "fbx_export.yaml": "cafff9a8508ff0ab0c4a3c0911028ee3f99f61836c0fbab725b70010456c8f4d",
     "mesh_budgets.yaml": "66fa8d8cc342bd7c744e7f97b6c4c77096d5f64342eca2e96f0af1e91f8cd7b5",
     "naming.schema.json": "796b030630d0a9b832b9815139301e0c825e862c52e8493e1b53707c4aed6e34",
     "texture_rules.yaml": "ee87884e2ae05bc5b7939c232f21798129b820ae003ebca3d1a153efb0c43ecf"
