@@ -18,3 +18,23 @@ incrementalSave/
 
 # Personal study notes, never committed
 notes/
+
+# Unity: everything here is regenerated from Assets/, Packages/ and ProjectSettings/.
+unity/[Ll]ibrary/
+unity/[Tt]emp/
+unity/[Ll]ogs/
+unity/[Uu]ser[Ss]ettings/
+unity/[Oo]bj/
+unity/[Bb]uild/
+unity/[Bb]uilds/
+unity/[Mm]emoryCaptures/
+unity/.utmp/
+# IDE files Unity/Visual Studio regenerate on every open
+.vs/
+*.csproj
+*.sln
+*.slnx
+*.suo
+*.user
+*.apk
+*.aab

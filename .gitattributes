@@ -12,3 +12,27 @@
 *.tga binary
 *.psd binary
 *.exr binary
+# Unity. Text YAML (Force Text serialization) stays LF so meta/scene diffs
+# are identical on every OS. A .meta file holds the asset's GUID: losing or
+# rewriting one breaks every reference to that asset.
+*.meta    text eol=lf
+*.unity   text eol=lf
+*.prefab  text eol=lf
+*.mat     text eol=lf
+*.asmdef  text eol=lf
+*.asmref  text eol=lf
+*.cs      text eol=lf
+*.uss     text eol=lf
+*.uxml    text eol=lf
+# .asset is NOT forced to text: a few asset types (lighting data, terrain)
+# stay binary even under Force Text, and "text" would corrupt them. The
+# global "* text=auto" above detects them by content.
+# Unity-side binaries
+*.jpg  binary
+*.jpeg binary
+*.tif  binary
+*.ttf  binary
+*.otf  binary
+*.wav  binary
+*.ogg  binary
+*.dll  binary

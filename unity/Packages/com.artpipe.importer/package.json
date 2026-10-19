@@ -1,0 +1,8 @@
+{
+  "name": "com.artpipe.importer",
+  "version": "0.1.0",
+  "displayName": "artpipe importer",
+  "description": "Agent-runnable Unity import stage of artpipe: import gate, ModelImporter/TextureImporter rules from conventions.lock.json, and a batchmode CLI with deterministic JSON reports. Editor-only.",
+  "unity": "6000.5",
+  "dependencies": {}
+}

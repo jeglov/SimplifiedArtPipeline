@@ -13,7 +13,10 @@ testpaths = ["tests"]
 # which interpreter (system Python or mayapy) launches pytest.
 pythonpath = ["."]
 # tests/maya/ needs mayapy; under plain Python those tests skip themselves.
-# Fast pure-Python run: artpipe test -m "not maya"
-markers = ["maya: needs Maya (mayapy); builds and validates real scenes"]
+# Fast pure-Python run: artpipe test -m "not maya and not unity"
+markers = [
+    "maya: needs Maya (mayapy); builds and validates real scenes",
+    "unity: boots the real Unity Editor in batchmode (slow); skipped if Unity is missing",
+]
 # Maya 2023 ships the old `future`/`past` packages, which warn on import. Not ours.
 filterwarnings = ["ignore::DeprecationWarning:past.*"]
