@@ -197,5 +197,49 @@ def test_bad_unity_root_is_rejected(conv_copy, root):
         conv.load(conv_copy)
 
 
-def test_unity_root_is_in_the_lock():
-    assert json.loads(lock.render())["unity_import"] == {"root": conv.load().unity_import.root}
+def test_unity_import_is_resolved_per_class_in_the_lock():
+    data = json.loads(lock.render())
+    u = data["unity_import"]
+    assert u["root"] == conv.load().unity_import.root
+    # Every class gets a full settings set (defaults merged), overrides win.
+    assert sorted(u["model"]) == sorted(data["classes"])
+    assert u["model"]["crowd_unit"]["rig"] == "generic" and u["model"]["crowd_unit"]["skin_weights"] == 2
+    assert u["model"]["prop_small"]["rig"] == "none" and u["model"]["prop_small"]["read_write"] is False
+    assert u["model"]["env_module"]["lightmap_uvs"] is True
+    assert all(c["verts_max"] > 0 for c in data["classes"].values())
+
+
+def unity_error(conv_copy, change) -> str:
+    edit_yaml(conv_copy / "unity_import.yaml", change)
+    with pytest.raises(conv.ConventionError) as exc:
+        conv.load(conv_copy)
+    return str(exc.value)
+
+
+def test_model_setting_typo_is_rejected(conv_copy):
+    assert "unknown key" in unity_error(conv_copy, lambda d: d["model"]["defaults"].__setitem__("readwrite", True))
+
+
+def test_bad_enum_value_is_rejected(conv_copy):
+    assert "mesh_compression" in unity_error(conv_copy, lambda d: d["model"]["defaults"].__setitem__("mesh_compression", "ultra"))
+
+
+@pytest.mark.parametrize("weights", [0, 3, 8])
+def test_skin_weights_must_be_a_unity_mode(conv_copy, weights):
+    assert "skin_weights" in unity_error(conv_copy, lambda d: d["model"]["classes"]["character"].__setitem__("skin_weights", weights))
+
+
+def test_override_for_unknown_class_is_rejected(conv_copy):
+    assert "unknown classes" in unity_error(conv_copy, lambda d: d["model"]["classes"].__setitem__("prop_tiny", {}))
+
+
+@pytest.mark.parametrize("transitions, cull", [([0.4, 0.4], 0.01), ([0.4, 0.15], 0.2), ([1.0], 0.01), ([0.4], 0.0)])
+def test_lod_heights_must_decrease_inside_0_1(conv_copy, transitions, cull):
+    msg = unity_error(conv_copy, lambda d: d.__setitem__("lods", {"transitions": transitions, "cull_below": cull}))
+    assert "decreasing" in msg
+
+
+def test_verts_max_is_required(conv_copy):
+    edit_yaml(conv_copy / "mesh_budgets.yaml", lambda d: d["classes"]["pickup"].pop("verts_max"))
+    with pytest.raises(conv.ConventionError, match="verts_max: missing"):
+        conv.load(conv_copy)

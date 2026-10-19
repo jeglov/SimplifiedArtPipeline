@@ -120,6 +120,8 @@ namespace Artpipe
         public string Description { get; set; }
         public List<string> MeshTypes { get; set; }
         public int TrisMax { get; set; }
+        /// <summary>Checked after the Unity import: vertices the GPU really gets (seams and hard edges split them).</summary>
+        public int VertsMax { get; set; }
         public SizeRange SizeCm { get; set; }
         public LodRules Lods { get; set; }
         public PivotRules Pivot { get; set; }
@@ -191,9 +193,50 @@ namespace Artpipe
     {
         /// <summary>The only folder the importer manages, e.g. "Assets/Art".</summary>
         public string Root { get; set; }
+        /// <summary>Shared materials folder: FBX material M_X is remapped to &lt;Materials&gt;/M_X.mat.</summary>
+        public string Materials { get; set; }
+        public LodRulesUnity Lods { get; set; }
+        /// <summary>Resolved ModelImporter settings per asset class.</summary>
+        public Dictionary<string, ModelSettings> Model { get; set; }
 
         public bool Manages(string assetPath) =>
             assetPath != null && assetPath.StartsWith(Root + "/", StringComparison.Ordinal);
+
+        /// <summary>
+        /// The class folder an asset sits in: "Assets/Art/prop_small/x/SM_A.fbx" -> "prop_small".
+        /// "" when the file sits directly in the root (no class folder).
+        /// </summary>
+        public string FolderClass(string assetPath)
+        {
+            var rest = assetPath.Substring(Root.Length + 1);
+            int slash = rest.IndexOf('/');
+            return slash < 0 ? "" : rest.Substring(0, slash);
+        }
+    }
+
+    public sealed class LodRulesUnity
+    {
+        /// <summary>Screen height where LOD i hands over to LOD i+1.</summary>
+        public List<double> Transitions { get; set; }
+        public double CullBelow { get; set; }
+    }
+
+    /// <summary>ModelImporter settings for one asset class (unity_import.yaml, defaults merged).</summary>
+    public sealed class ModelSettings
+    {
+        public bool Animation { get; set; }
+        public bool BlendShapes { get; set; }
+        public bool Cameras { get; set; }
+        public bool LightmapUvs { get; set; }
+        public bool Lights { get; set; }
+        public string MeshCompression { get; set; }
+        public string Normals { get; set; }
+        public bool OptimizeMesh { get; set; }
+        public bool ReadWrite { get; set; }
+        public string Rig { get; set; }
+        public int SkinWeights { get; set; }
+        public string Tangents { get; set; }
+        public bool Visibility { get; set; }
     }
 
     public sealed class NameRule

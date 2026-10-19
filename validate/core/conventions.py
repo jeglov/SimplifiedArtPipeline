@@ -78,6 +78,7 @@ class AssetClass:
     description: str
     mesh_types: Tuple[str, ...]
     tris_max: int
+    verts_max: int  # checked after the Unity import (GPU vertices, backlog #11)
     size_cm_min: float
     size_cm_max: float
     lods: LodRules
@@ -136,10 +137,29 @@ FBX_FLAGS = (
 )
 
 
+# unity_import.yaml model settings: name -> allowed values (None = bool, int = range).
+MODEL_ENUMS = {
+    "mesh_compression": ("off", "low", "medium", "high"),
+    "normals": ("import", "calculate"),
+    "tangents": ("import", "calculate_mikk", "none"),
+    "rig": ("none", "generic"),
+}
+MODEL_BOOLS = ("animation", "blend_shapes", "cameras", "lightmap_uvs", "lights",
+               "optimize_mesh", "read_write", "visibility")
+
+
 @dataclass(frozen=True)
 class UnityImportRules:
     """conventions/unity_import.yaml: how the Unity package imports assets."""
     root: str  # e.g. "Assets/Art": the only folder the importer manages
+    materials: str  # shared materials folder, e.g. "Assets/Art/Materials"
+    lod_transitions: Tuple[float, ...]
+    lod_cull_below: float
+    # {class: {setting: value}}, defaults merged per class, sorted.
+    model: Tuple[Tuple[str, Tuple[Tuple[str, Any], ...]], ...]
+
+    def model_for(self, class_name: str) -> Dict[str, Any]:
+        return dict(dict(self.model)[class_name])
 
 
 @dataclass(frozen=True)
@@ -233,6 +253,9 @@ def _parse_class(name: str, raw: Dict[str, Any], tex_sizes: Dict[str, int], wher
     tris_max = r.get("tris_max", int)
     if tris_max <= 0:
         raise ConventionError("%s.tris_max: must be > 0" % where)
+    verts_max = r.get("verts_max", int)
+    if verts_max <= 0:
+        raise ConventionError("%s.verts_max: must be > 0" % where)
 
     size = r.sub("size_cm")
     smin, smax = size.get("min", float), size.get("max", float)
@@ -276,7 +299,7 @@ def _parse_class(name: str, raw: Dict[str, Any], tex_sizes: Dict[str, int], wher
     r.done()
 
     return AssetClass(
-        name=name, description=description, mesh_types=mesh_types, tris_max=tris_max,
+        name=name, description=description, mesh_types=mesh_types, tris_max=tris_max, verts_max=verts_max,
         size_cm_min=smin, size_cm_max=smax, lods=lods, pivot=pivot,
         max_materials=max_materials, uv=uv,
         texture_max_size=tex_sizes.get(name, tex_sizes["default"]),
@@ -391,15 +414,60 @@ def _parse_fbx_export(data: Dict[str, Any]) -> FbxExportRules:
     return FbxExportRules(settings_version, file_version, up_axis, flags)
 
 
-def _parse_unity_import(data: Dict[str, Any]) -> UnityImportRules:
+_ASSET_FOLDER = re.compile(r"^Assets(/[^/\\]+)+$")
+
+
+def _parse_model_settings(raw: Dict[str, Any], where: str) -> Dict[str, Any]:
+    r = _Reader(raw, where)
+    out: Dict[str, Any] = {}
+    for name, allowed in sorted(MODEL_ENUMS.items()):
+        value = r.get(name, str)
+        if value not in allowed:
+            raise ConventionError("%s.%s: must be one of %s" % (where, name, allowed))
+        out[name] = value
+    for name in MODEL_BOOLS:
+        out[name] = r.get(name, bool)
+    skin = r.get("skin_weights", int)
+    if skin not in (1, 2, 4):
+        # Unity's fixed bone-weight modes; "unlimited" is never mobile-safe.
+        raise ConventionError("%s.skin_weights: must be 1, 2 or 4" % where)
+    out["skin_weights"] = skin
+    r.done()
+    return out
+
+
+def _parse_unity_import(data: Dict[str, Any], class_names: Tuple[str, ...]) -> UnityImportRules:
     r = _Reader(data, "unity_import")
     r.get("version", int)
     root = r.get("root", str)
+    materials = r.get("materials", str)
+    for key, value in (("root", root), ("materials", materials)):
+        # Unity asset paths: forward slashes, under Assets/, no trailing slash.
+        if not _ASSET_FOLDER.match(value):
+            raise ConventionError("unity_import.%s: expected a folder like Assets/Art, got %r" % (key, value))
+
+    lr = r.sub("lods")
+    transitions = tuple(float(x) for x in lr.get("transitions", list))
+    cull = lr.get("cull_below", float)
+    lr.done()
+    heights = transitions + (cull,)
+    if not all(0 < h < 1 for h in heights) or any(b >= a for a, b in zip(heights, heights[1:])):
+        raise ConventionError("unity_import.lods: transitions then cull_below must be in (0, 1) and decreasing")
+
+    mr = r.sub("model")
+    defaults = mr.get("defaults", dict)
+    overrides = mr.get("classes", dict)
+    mr.done()
     r.done()
-    # Unity asset paths: forward slashes, under Assets/, no trailing slash.
-    if not re.match(r"^Assets(/[^/\\]+)+$", root):
-        raise ConventionError("unity_import.root: expected a folder like Assets/Art, got %r" % root)
-    return UnityImportRules(root=root)
+    unknown = sorted(set(overrides) - set(class_names))
+    if unknown:
+        raise ConventionError("unity_import.model.classes: unknown classes %s" % unknown)
+    model = tuple(
+        (name, tuple(sorted(_parse_model_settings(
+            _deep_merge(defaults, overrides.get(name) or {}), "unity_import.model.%s" % name).items())))
+        for name in sorted(class_names))
+    return UnityImportRules(root=root, materials=materials, lod_transitions=transitions,
+                            lod_cull_below=cull, model=model)
 
 
 def load(conventions_dir: Optional[Path] = None) -> Conventions:
@@ -411,7 +479,6 @@ def load(conventions_dir: Optional[Path] = None) -> Conventions:
 
     textures, tex_sizes = _parse_textures(_read_yaml(d / "texture_rules.yaml"))
     fbx_export = _parse_fbx_export(_read_yaml(d / "fbx_export.yaml"))
-    unity_import = _parse_unity_import(_read_yaml(d / "unity_import.yaml"))
 
     budgets = _read_yaml(d / "mesh_budgets.yaml")
     br = _Reader(budgets, "mesh_budgets")
@@ -427,6 +494,8 @@ def load(conventions_dir: Optional[Path] = None) -> Conventions:
         _parse_class(name, _deep_merge(defaults, raw or {}), tex_sizes, "mesh_budgets.classes.%s" % name)
         for name, raw in sorted(raw_classes.items())  # sorted = deterministic order
     )
+
+    unity_import = _parse_unity_import(_read_yaml(d / "unity_import.yaml"), tuple(c.name for c in classes))
 
     # --- cross-file consistency ---
     class_names = {c.name for c in classes}

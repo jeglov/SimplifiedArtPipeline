@@ -44,6 +44,7 @@ def _classes(c: conv.Conventions) -> str:
             "`%s`" % a.name, a.description,
             ", ".join("`%s_`" % t for t in a.mesh_types),
             "{:,}".format(a.tris_max),
+            "{:,}".format(a.verts_max),
             str(a.lods.min) if a.lods.min == a.lods.max else "%d–%d" % (a.lods.min, a.lods.max),
             "%s–%s" % (_num(a.size_cm_min), _num(a.size_cm_max)),
             a.pivot.mode,
@@ -52,7 +53,7 @@ def _classes(c: conv.Conventions) -> str:
             str(a.texture_max_size),
             overrides,
         ])
-    text = _table(["Class", "Use", "Prefix", "Max tris (LOD0)", "LOD levels", "Size (cm)", "Pivot",
+    text = _table(["Class", "Use", "Prefix", "Max tris (LOD0)", "Max verts in Unity (LOD0)", "LOD levels", "Size (cm)", "Pivot",
                    "Max materials", "UV0 inside 0–1", "Max texture (px)", "Severity overrides"], rows)
     ratios = {(a.lods.max_ratio, a.lods.tolerance) for a in c.classes}
     if len(ratios) == 1:

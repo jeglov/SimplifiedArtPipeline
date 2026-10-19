@@ -34,7 +34,8 @@
           "map1"
         ],
         "unit_square": true
-      }
+      },
+      "verts_max": 7500
     },
     "crowd_unit": {
       "description": "Crowd / army member (runner and crowd games). 50-200 on screen, so the budget is tiny and 1 material is mandatory for GPU instancing.",
@@ -70,7 +71,8 @@
           "map1"
         ],
         "unit_square": true
-      }
+      },
+      "verts_max": 1200
     },
     "env_module": {
       "description": "Modular environment kit pieces (floor tiles, walls, track pieces).",
@@ -108,7 +110,8 @@
           "map1"
         ],
         "unit_square": false
-      }
+      },
+      "verts_max": 3000
     },
     "pickup": {
       "description": "Coins, gems, collectibles. Dozens on screen, usually spinning.",
@@ -144,7 +147,8 @@
           "map1"
         ],
         "unit_square": true
-      }
+      },
+      "verts_max": 450
     },
     "prop_hero": {
       "description": "Focal props the camera dwells on (chests, upgrade stations).",
@@ -180,7 +184,8 @@
           "map1"
         ],
         "unit_square": true
-      }
+      },
+      "verts_max": 4500
     },
     "prop_medium": {
       "description": "Furniture-scale props, obstacles.",
@@ -216,7 +221,8 @@
           "map1"
         ],
         "unit_square": true
-      }
+      },
+      "verts_max": 2250
     },
     "prop_small": {
       "description": "Small set dressing (bottle, cone, crate). Many instances.",
@@ -252,7 +258,8 @@
           "map1"
         ],
         "unit_square": true
-      }
+      },
+      "verts_max": 750
     },
     "vehicle": {
       "description": "Cars, boats, karts.",
@@ -288,7 +295,8 @@
           "map1"
         ],
         "unit_square": true
-      }
+      },
+      "verts_max": 6000
     }
   },
   "fbx_export": {
@@ -402,10 +410,10 @@
   },
   "sources": {
     "fbx_export.yaml": "cafff9a8508ff0ab0c4a3c0911028ee3f99f61836c0fbab725b70010456c8f4d",
-    "mesh_budgets.yaml": "66fa8d8cc342bd7c744e7f97b6c4c77096d5f64342eca2e96f0af1e91f8cd7b5",
+    "mesh_budgets.yaml": "3e303d868d29ecad71d41def0e460012f8ee8150b2348105d065252e42ee9b27",
     "naming.schema.json": "796b030630d0a9b832b9815139301e0c825e862c52e8493e1b53707c4aed6e34",
     "texture_rules.yaml": "ee87884e2ae05bc5b7939c232f21798129b820ae003ebca3d1a153efb0c43ecf",
-    "unity_import.yaml": "5061b9b9dc3abd7ef3b114e4242413a3e8a8745a4949339abe05c574b7ac6ff3"
+    "unity_import.yaml": "bc9a3f96949e568799518b534582a9c9c31aaf655c276eed3998129caf17f0e3"
   },
   "textures": {
     "min_size": 32,
@@ -485,6 +493,137 @@
     "linear": "cm"
   },
   "unity_import": {
+    "lods": {
+      "cull_below": 0.01,
+      "transitions": [
+        0.4,
+        0.15,
+        0.05
+      ]
+    },
+    "materials": "Assets/Art/Materials",
+    "model": {
+      "character": {
+        "animation": false,
+        "blend_shapes": false,
+        "cameras": false,
+        "lightmap_uvs": false,
+        "lights": false,
+        "mesh_compression": "medium",
+        "normals": "import",
+        "optimize_mesh": true,
+        "read_write": false,
+        "rig": "generic",
+        "skin_weights": 4,
+        "tangents": "calculate_mikk",
+        "visibility": false
+      },
+      "crowd_unit": {
+        "animation": false,
+        "blend_shapes": false,
+        "cameras": false,
+        "lightmap_uvs": false,
+        "lights": false,
+        "mesh_compression": "medium",
+        "normals": "import",
+        "optimize_mesh": true,
+        "read_write": false,
+        "rig": "generic",
+        "skin_weights": 2,
+        "tangents": "calculate_mikk",
+        "visibility": false
+      },
+      "env_module": {
+        "animation": false,
+        "blend_shapes": false,
+        "cameras": false,
+        "lightmap_uvs": true,
+        "lights": false,
+        "mesh_compression": "medium",
+        "normals": "import",
+        "optimize_mesh": true,
+        "read_write": false,
+        "rig": "none",
+        "skin_weights": 4,
+        "tangents": "calculate_mikk",
+        "visibility": false
+      },
+      "pickup": {
+        "animation": false,
+        "blend_shapes": false,
+        "cameras": false,
+        "lightmap_uvs": false,
+        "lights": false,
+        "mesh_compression": "medium",
+        "normals": "import",
+        "optimize_mesh": true,
+        "read_write": false,
+        "rig": "none",
+        "skin_weights": 4,
+        "tangents": "calculate_mikk",
+        "visibility": false
+      },
+      "prop_hero": {
+        "animation": false,
+        "blend_shapes": false,
+        "cameras": false,
+        "lightmap_uvs": false,
+        "lights": false,
+        "mesh_compression": "medium",
+        "normals": "import",
+        "optimize_mesh": true,
+        "read_write": false,
+        "rig": "none",
+        "skin_weights": 4,
+        "tangents": "calculate_mikk",
+        "visibility": false
+      },
+      "prop_medium": {
+        "animation": false,
+        "blend_shapes": false,
+        "cameras": false,
+        "lightmap_uvs": false,
+        "lights": false,
+        "mesh_compression": "medium",
+        "normals": "import",
+        "optimize_mesh": true,
+        "read_write": false,
+        "rig": "none",
+        "skin_weights": 4,
+        "tangents": "calculate_mikk",
+        "visibility": false
+      },
+      "prop_small": {
+        "animation": false,
+        "blend_shapes": false,
+        "cameras": false,
+        "lightmap_uvs": false,
+        "lights": false,
+        "mesh_compression": "medium",
+        "normals": "import",
+        "optimize_mesh": true,
+        "read_write": false,
+        "rig": "none",
+        "skin_weights": 4,
+        "tangents": "calculate_mikk",
+        "visibility": false
+      },
+      "vehicle": {
+        "animation": false,
+        "blend_shapes": false,
+        "cameras": false,
+        "lightmap_uvs": false,
+        "lights": false,
+        "mesh_compression": "medium",
+        "normals": "import",
+        "optimize_mesh": true,
+        "read_write": false,
+        "rig": "none",
+        "skin_weights": 4,
+        "tangents": "calculate_mikk",
+        "visibility": false
+      }
+    },
     "root": "Assets/Art"
   }
 }

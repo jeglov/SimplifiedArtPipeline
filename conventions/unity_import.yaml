@@ -1,9 +1,58 @@
 # artpipe Unity import settings (Phase 2). Read by the Unity package through
 # conventions.lock.json; never typed into C#.
+#
+# Why settings live here and not in clicks: an import setting set by hand in
+# the Inspector is invisible in review, differs between assets, and is lost
+# when someone re-imports with defaults. Here it is reviewed, versioned, and
+# applied identically to every asset of a class on every import.
 
 version: 1
 
 # The importer manages ONLY assets under this folder. Anything else (store
 # packages, plugins, prototypes) is left alone: a pipeline that touches
 # assets it doesn't own breaks other people's work.
+# Layout: <root>/<asset_class>/.../<file>.fbx. The folder names the asset
+# class (backlog #6) and the import gate checks it against the Maya report.
 root: Assets/Art
+
+# Shared materials. An FBX material named M_Crate is remapped to
+# <materials>/M_Crate.mat when that file exists, so many assets share one
+# material (fewer SRP Batcher variants, atlas-friendly). Without it the FBX's
+# own embedded material is used and `unity.materials` warns.
+materials: Assets/Art/Materials
+
+# LOD switch points as a fraction of screen height. Index i = when LOD i
+# hands over to LOD i+1; the last LOD culls below cull_below. Unity's
+# defaults (0.25, then 0.01) keep a 2-level asset on LOD0 far too long.
+lods:
+  transitions: [0.4, 0.15, 0.05]
+  cull_below: 0.01
+
+model:
+  defaults:
+    # Off|Low|Medium|High. Quantizes vertex data on disk (smaller build); the
+    # GPU still gets full-precision vertices, so it's free at runtime.
+    mesh_compression: medium
+    # Read/Write keeps a CPU copy of every mesh: double memory. Only needed
+    # for runtime mesh access (procedural deformation, MeshCollider baking).
+    read_write: false
+    optimize_mesh: true          # reorder vertices/indices for the GPU cache
+    normals: import              # import|calculate: Maya's hard/soft edges
+    tangents: calculate_mikk     # MikkTSpace, what bakers like Substance assume
+    lightmap_uvs: false          # static GI only: costs a UV channel
+    blend_shapes: false
+    cameras: false
+    lights: false
+    visibility: false
+    # Static props carry no animation. "generic" on a static mesh would add an
+    # Animator and an empty clip (probed: Unity's default is Generic + import
+    # animation ON).
+    animation: false
+    rig: none                    # none|generic
+    skin_weights: 4              # max bone influences per vertex (rig: generic)
+  classes:
+    character: {rig: generic, skin_weights: 4}
+    # 50-200 on screen: 2 influences halve the skinning cost per vertex.
+    crowd_unit: {rig: generic, skin_weights: 2}
+    # Modular kits are the static geometry that gets baked lighting.
+    env_module: {lightmap_uvs: true}

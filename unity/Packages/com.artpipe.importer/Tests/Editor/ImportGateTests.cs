@@ -163,84 +163,149 @@ namespace Artpipe.Tests
         }
     }
 
+    /// <summary>
+    /// Real imports into the project, cleaned up after each test: creates the
+    /// folders it needs (e.g. Assets/Art/prop_small/__artpipe_tests__) and
+    /// deletes exactly the folders it created, never anything that was there.
+    /// </summary>
+    public sealed class Sandbox
+    {
+        public const string Marker = "__artpipe_tests__";
+        readonly List<string> _created = new List<string>();
+        public readonly ConventionsLock Conventions = ConventionsLock.Load();
+
+        readonly List<string> _files = new List<string>();
+
+        /// <summary>A test folder inside &lt;root&gt;/&lt;folderClass&gt;/; "" = the root itself (files there are cleaned up one by one).</summary>
+        public string ClassFolder(string folderClass) =>
+            Folder(folderClass == "" ? Conventions.UnityImport.Root
+                                     : $"{Conventions.UnityImport.Root}/{folderClass}/{Marker}");
+
+        public string Folder(string assetFolder)
+        {
+            var parts = assetFolder.Split('/');
+            for (int i = 2; i <= parts.Length; i++)
+            {
+                var path = string.Join("/", parts.Take(i));
+                if (AssetDatabase.IsValidFolder(path)) continue;
+                AssetDatabase.CreateFolder(string.Join("/", parts.Take(i - 1)), parts[i - 1]);
+                _created.Add(path);
+            }
+            return assetFolder;
+        }
+
+        public string Put(string golden, string folder, bool withReport = true)
+        {
+            var fbx = $"{folder}/{golden}.fbx";
+            File.Copy(Goldens.Fbx(golden), fbx, true);
+            _files.Add(fbx);
+            if (withReport)
+            {
+                File.Copy(ImportGate.SidecarPath(Goldens.Fbx(golden)), ImportGate.SidecarPath(fbx), true);
+                _files.Add(ImportGate.SidecarPath(fbx));
+            }
+            return fbx;
+        }
+
+        /// <summary>
+        /// Refresh and load. expectError: a regex at least one import error must
+        /// match; any other error fails the test. Errors are captured instead of
+        /// LogAssert.Expect'ed one by one because an FBX that arrives together with
+        /// its sidecar is imported twice (the sidecar is a declared dependency),
+        /// so the same error can legitimately appear more than once.
+        /// </summary>
+        public static GameObject Import(string path, string expectError = null)
+        {
+            var errors = new List<string>();
+            Application.LogCallback capture = (msg, _, type) =>
+            {
+                if (type == LogType.Error || type == LogType.Exception) errors.Add(msg);
+            };
+            Application.logMessageReceived += capture;
+            LogAssert.ignoreFailingMessages = true;
+            try { AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport); }
+            finally
+            {
+                Application.logMessageReceived -= capture;
+                LogAssert.ignoreFailingMessages = false;
+            }
+            if (expectError == null)
+                CollectionAssert.IsEmpty(errors, "unexpected import errors");
+            else
+            {
+                var rx = new Regex(expectError);
+                Assert.IsTrue(errors.Any(rx.IsMatch), $"expected an error matching /{expectError}/, got: {string.Join(" | ", errors)}");
+                CollectionAssert.IsEmpty(errors.Where(e => !rx.IsMatch(e)), "other import errors");
+            }
+            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        }
+
+        public void Dispose()
+        {
+            foreach (var f in _files) AssetDatabase.DeleteAsset(f);
+            _files.Clear();
+            for (int i = _created.Count - 1; i >= 0; i--) AssetDatabase.DeleteAsset(_created[i]);
+            _created.Clear();
+        }
+    }
+
     /// <summary>The gate inside Unity's real import (AssetPostprocessor), under the managed root.</summary>
     public class ModelGatePostprocessorTests
     {
-        string _root;          // e.g. Assets/Art
-        string _dir;           // Assets/Art/__artpipe_tests__
-        bool _createdRoot;
-        string _outside = "Assets/__artpipe_tests_outside__";
+        Sandbox _box;
 
-        [SetUp]
-        public void SetUp()
-        {
-            _root = ConventionsLock.Load().UnityImport.Root;
-            _createdRoot = !AssetDatabase.IsValidFolder(_root);
-            Directory.CreateDirectory(_root + "/__artpipe_tests__");
-            Directory.CreateDirectory(_outside);
-            _dir = _root + "/__artpipe_tests__";
-            AssetDatabase.Refresh();
-        }
-
-        [TearDown]
-        public void TearDown()
-        {
-            AssetDatabase.DeleteAsset(_dir);
-            AssetDatabase.DeleteAsset(_outside);
-            if (_createdRoot) AssetDatabase.DeleteAsset(_root);
-        }
-
-        static void Put(string name, string folder, bool withReport)
-        {
-            File.Copy(Goldens.Fbx(name), $"{folder}/{name}.fbx", true);
-            if (withReport)
-                File.Copy(ImportGate.SidecarPath(Goldens.Fbx(name)), $"{folder}/{name}.fbx.report.json", true);
-        }
-
-        static GameObject Import(string path)
-        {
-            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
-        }
+        [SetUp] public void SetUp() => _box = new Sandbox();
+        [TearDown] public void TearDown() => _box.Dispose();
 
         [Test]
         public void GatedFbxImportsNormally()
         {
-            Put("SM_Clean", _dir, withReport: true);
-            var go = Import(_dir + "/SM_Clean.fbx");
+            var go = Sandbox.Import(_box.Put("SM_Clean", _box.ClassFolder("prop_small")));
             Assert.IsNotNull(go);
-            Assert.IsFalse(ModelGatePostprocessor.Refused(go));
+            Assert.IsFalse(ModelPostprocessor.IsInert(go));
         }
 
         [Test]
         public void UngatedFbxIsMadeInertAndFlagged()
         {
-            Put("SM_Clean", _dir, withReport: false);
-            LogAssert.Expect(LogType.Error, new Regex("artpipe gate refused .*gate.report_present"));
-            var go = Import(_dir + "/SM_Clean.fbx");
+            var fbx = _box.Put("SM_Clean", _box.ClassFolder("prop_small"), withReport: false);
+            var go = Sandbox.Import(fbx, "artpipe gate refused .*gate.report_present");
             Assert.IsNotNull(go, "the asset still exists (an import can't be cancelled)...");
-            Assert.IsTrue(ModelGatePostprocessor.Refused(go), "...but it has no renderers");
+            Assert.IsTrue(ModelPostprocessor.IsInert(go), "...but it has no renderers");
         }
 
         [Test]
         public void AddingTheReportLaterReimportsTheFbx()
         {
             // The sidecar is a declared import dependency: adding it must rerun the gate.
-            Put("SM_Clean", _dir, withReport: false);
-            LogAssert.Expect(LogType.Error, new Regex("artpipe gate refused"));
-            Assert.IsTrue(ModelGatePostprocessor.Refused(Import(_dir + "/SM_Clean.fbx")));
+            var folder = _box.ClassFolder("prop_small");
+            var fbx = _box.Put("SM_Clean", folder, withReport: false);
+            Assert.IsTrue(ModelPostprocessor.IsInert(Sandbox.Import(fbx, "artpipe gate refused")));
 
-            Put("SM_Clean", _dir, withReport: true);
-            Assert.IsFalse(ModelGatePostprocessor.Refused(Import(_dir + "/SM_Clean.fbx")));
+            _box.Put("SM_Clean", folder, withReport: true);
+            Assert.IsFalse(ModelPostprocessor.IsInert(Sandbox.Import(fbx)));
+        }
+
+        [Test]
+        public void FbxInTheWrongClassFolderIsRefused()
+        {
+            // Validated as prop_small, dropped into pickup/: budgets would be wrong (backlog #6).
+            var fbx = _box.Put("SM_Clean", _box.ClassFolder("pickup"));
+            Assert.IsTrue(ModelPostprocessor.IsInert(Sandbox.Import(fbx, "gate.asset_class: .*pickup.*prop_small")));
+        }
+
+        [Test]
+        public void FbxDirectlyInTheRootIsRefused()
+        {
+            var fbx = _box.Put("SM_Clean", _box.ClassFolder(""));
+            Assert.IsTrue(ModelPostprocessor.IsInert(Sandbox.Import(fbx, "gate.asset_class: The FBX must sit in its class folder")));
         }
 
         [Test]
         public void FbxOutsideTheManagedRootIsLeftAlone()
         {
-            Put("SM_Clean", _outside, withReport: false);
-            var go = Import(_outside + "/SM_Clean.fbx");
-            Assert.IsFalse(ModelGatePostprocessor.Refused(go));
-            LogAssert.NoUnexpectedReceived();
+            var fbx = _box.Put("SM_Clean", _box.Folder("Assets/" + Sandbox.Marker), withReport: false);
+            Assert.IsFalse(ModelPostprocessor.IsInert(Sandbox.Import(fbx)));
         }
     }
 }

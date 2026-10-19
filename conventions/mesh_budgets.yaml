@@ -10,6 +10,12 @@
 # replaces scalars and lists. Unknown keys are a hard error (catches typos
 # like `tri_max`).
 #
+# tris_max is checked in Maya. verts_max is checked AFTER the Unity import
+# (backlog #11): the GPU processes vertices, and every UV seam and hard edge
+# splits one Maya vertex into several, which Maya's own counts don't show.
+# Set to 1.5x tris_max: a smooth, few-seam prop sits well under 1.0x, a
+# fully faceted one (every edge hard) near 2x, which is the waste to catch.
+#
 # Rule vs severity:
 #   rules (uv.overlap_allowed, size_cm...)  define what is CORRECT.
 #   severity_overrides                      define how BAD a violation is.
@@ -58,23 +64,27 @@ classes:
   pickup:
     description: Coins, gems, collectibles. Dozens on screen, usually spinning.
     tris_max: 300
+    verts_max: 450
     size_cm: {min: 5, max: 100}
     pivot: {mode: center}
 
   prop_small:
     description: Small set dressing (bottle, cone, crate). Many instances.
     tris_max: 500
+    verts_max: 750
     size_cm: {min: 5, max: 150}
 
   prop_medium:
     description: Furniture-scale props, obstacles.
     tris_max: 1500
+    verts_max: 2250
     size_cm: {min: 30, max: 400}
     lods: {max: 2}
 
   prop_hero:
     description: Focal props the camera dwells on (chests, upgrade stations).
     tris_max: 3000
+    verts_max: 4500
     size_cm: {min: 20, max: 1000}
     lods: {max: 3}
     max_materials: 2
@@ -83,6 +93,7 @@ classes:
     description: Player / boss character. 1-3 on screen.
     mesh_types: [SK]
     tris_max: 5000
+    verts_max: 7500
     size_cm: {min: 50, max: 300}
     lods: {max: 3}
     max_materials: 2
@@ -91,11 +102,13 @@ classes:
     description: Crowd / army member (runner and crowd games). 50-200 on screen, so the budget is tiny and 1 material is mandatory for GPU instancing.
     mesh_types: [SK]
     tris_max: 800
+    verts_max: 1200
     size_cm: {min: 50, max: 300}
 
   vehicle:
     description: Cars, boats, karts.
     tris_max: 4000
+    verts_max: 6000
     size_cm: {min: 100, max: 1500}
     lods: {max: 3}
     max_materials: 2
@@ -103,6 +116,7 @@ classes:
   env_module:
     description: Modular environment kit pieces (floor tiles, walls, track pieces).
     tris_max: 2000
+    verts_max: 3000
     size_cm: {min: 50, max: 5000}
     lods: {max: 2}
     pivot: {mode: origin}

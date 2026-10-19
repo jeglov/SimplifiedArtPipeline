@@ -18,8 +18,11 @@ namespace Artpipe
     {
         public static string SidecarPath(string fbxPath) => fbxPath + ".report.json";
 
-        /// <summary>Gate results in a fixed order. Stops after the first result that makes later ones meaningless.</summary>
-        public static List<CheckResult> Evaluate(string fbxPath, ConventionsLock conventions)
+        /// <summary>
+        /// Gate results in a fixed order. Stops after the first result that makes later ones meaningless.
+        /// folderClass: the class folder the FBX sits in (backlog #6), "" for none, null to skip that check.
+        /// </summary>
+        public static List<CheckResult> Evaluate(string fbxPath, ConventionsLock conventions, string folderClass = null)
         {
             var results = new List<CheckResult>();
             var sidecar = SidecarPath(fbxPath);
@@ -65,9 +68,15 @@ namespace Artpipe
                 new Dictionary<string, object> { ["required"] = want, ["found"] = exported ? (object)report.Export.SettingsVersion : null }));
 
             bool knownClass = conventions.Classes.ContainsKey(report.AssetClass);
-            results.Add(Result("gate.asset_class", knownClass, fbxPath,
-                knownClass ? $"Asset class {report.AssetClass}."
-                           : $"Asset class '{report.AssetClass}' is not in the conventions."));
+            bool inFolder = folderClass == null || folderClass == report.AssetClass;
+            var root = conventions.UnityImport.Root;
+            results.Add(Result("gate.asset_class", knownClass && inFolder, fbxPath,
+                !knownClass ? $"Asset class '{report.AssetClass}' is not in the conventions."
+                : !inFolder ? (folderClass == ""
+                    ? $"The FBX must sit in its class folder: {root}/{report.AssetClass}/."
+                    : $"The FBX is in {root}/{folderClass}/ but was validated as {report.AssetClass}: move it to {root}/{report.AssetClass}/ or re-validate with --class {folderClass}.")
+                : $"Asset class {report.AssetClass}.",
+                new Dictionary<string, object> { ["report_class"] = report.AssetClass, ["folder_class"] = folderClass }));
             return results;
         }
 

@@ -46,6 +46,7 @@ def build(c: conv.Conventions, conventions_dir: Path) -> Dict[str, Any]:
             "description": k.description,
             "mesh_types": list(k.mesh_types),
             "tris_max": k.tris_max,
+            "verts_max": k.verts_max,
             "size_cm": {"min": k.size_cm_min, "max": k.size_cm_max},
             "lods": {"min": k.lods.min, "max": k.lods.max,
                      "max_ratio": list(k.lods.max_ratio), "tolerance": k.lods.tolerance},
@@ -85,7 +86,13 @@ def build(c: conv.Conventions, conventions_dir: Path) -> Dict[str, Any]:
         "textures": textures,
         "naming": naming,
         "fbx_export": fbx_export,
-        "unity_import": {"root": c.unity_import.root},
+        "unity_import": {
+            "root": c.unity_import.root,
+            "materials": c.unity_import.materials,
+            "lods": {"transitions": list(c.unity_import.lod_transitions),
+                     "cull_below": c.unity_import.lod_cull_below},
+            "model": {name: dict(settings) for name, settings in c.unity_import.model},
+        },
     }
 
 

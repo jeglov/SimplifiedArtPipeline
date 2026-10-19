@@ -46,16 +46,16 @@ range, pivot rule and which checks are relaxed. Pick the class from how the
 asset is used in the game, not from what it looks like.
 
 <!-- generated:classes -->
-| Class | Use | Prefix | Max tris (LOD0) | LOD levels | Size (cm) | Pivot | Max materials | UV0 inside 0–1 | Max texture (px) | Severity overrides |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `character` | Player / boss character. 1-3 on screen. | `SK_` | 5,000 | 1–3 | 50–300 | bottom_center | 2 | yes | 1024 | — |
-| `crowd_unit` | Crowd / army member (runner and crowd games). 50-200 on screen, so the budget is tiny and 1 material is mandatory for GPU instancing. | `SK_` | 800 | 1 | 50–300 | bottom_center | 1 | yes | 256 | — |
-| `env_module` | Modular environment kit pieces (floor tiles, walls, track pieces). | `SM_` | 2,000 | 1–2 | 50–5000 | origin | 1 | no (tiling) | 1024 | `topology.open_borders` → warning |
-| `pickup` | Coins, gems, collectibles. Dozens on screen, usually spinning. | `SM_` | 300 | 1 | 5–100 | center | 1 | yes | 128 | — |
-| `prop_hero` | Focal props the camera dwells on (chests, upgrade stations). | `SM_` | 3,000 | 1–3 | 20–1000 | bottom_center | 2 | yes | 1024 | — |
-| `prop_medium` | Furniture-scale props, obstacles. | `SM_` | 1,500 | 1–2 | 30–400 | bottom_center | 1 | yes | 512 | — |
-| `prop_small` | Small set dressing (bottle, cone, crate). Many instances. | `SM_` | 500 | 1 | 5–150 | bottom_center | 1 | yes | 256 | — |
-| `vehicle` | Cars, boats, karts. | `SM_` | 4,000 | 1–3 | 100–1500 | bottom_center | 2 | yes | 1024 | — |
+| Class | Use | Prefix | Max tris (LOD0) | Max verts in Unity (LOD0) | LOD levels | Size (cm) | Pivot | Max materials | UV0 inside 0–1 | Max texture (px) | Severity overrides |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `character` | Player / boss character. 1-3 on screen. | `SK_` | 5,000 | 7,500 | 1–3 | 50–300 | bottom_center | 2 | yes | 1024 | — |
+| `crowd_unit` | Crowd / army member (runner and crowd games). 50-200 on screen, so the budget is tiny and 1 material is mandatory for GPU instancing. | `SK_` | 800 | 1,200 | 1 | 50–300 | bottom_center | 1 | yes | 256 | — |
+| `env_module` | Modular environment kit pieces (floor tiles, walls, track pieces). | `SM_` | 2,000 | 3,000 | 1–2 | 50–5000 | origin | 1 | no (tiling) | 1024 | `topology.open_borders` → warning |
+| `pickup` | Coins, gems, collectibles. Dozens on screen, usually spinning. | `SM_` | 300 | 450 | 1 | 5–100 | center | 1 | yes | 128 | — |
+| `prop_hero` | Focal props the camera dwells on (chests, upgrade stations). | `SM_` | 3,000 | 4,500 | 1–3 | 20–1000 | bottom_center | 2 | yes | 1024 | — |
+| `prop_medium` | Furniture-scale props, obstacles. | `SM_` | 1,500 | 2,250 | 1–2 | 30–400 | bottom_center | 1 | yes | 512 | — |
+| `prop_small` | Small set dressing (bottle, cone, crate). Many instances. | `SM_` | 500 | 750 | 1 | 5–150 | bottom_center | 1 | yes | 256 | — |
+| `vehicle` | Cars, boats, karts. | `SM_` | 4,000 | 6,000 | 1–3 | 100–1500 | bottom_center | 2 | yes | 1024 | — |
 
 LOD budget (all classes): LOD*n* may have at most 100% / 50% / 25% / 12.5% of LOD0's triangles for n = 0..3, plus 10% tolerance.
 Pivot tolerance (all classes): 0.5 cm.
