@@ -5,116 +5,135 @@ headless and returns machine-readable JSON, so an AI agent can do the whole
 loop with no human in it: generate an asset, validate it, fix what is safe
 to fix, and import it into Unity.
 
-> **Status: Phase 1 complete.** Conventions, a headless Maya validator, safe
-> auto-fixes and a Maya integration suite are done. Next: the Unity import
-> pipeline (Phase 2). See the [roadmap](#roadmap).
+> **Status: Phases 1 and 2 complete.** A headless Maya validator with safe
+> auto-fixes, deterministic FBX export, and a Unity 6 import pipeline with an
+> import gate, per-class import rules, GPU budgets and a batchmode CLI. One
+> command takes a messy Maya scene to a clean Unity prefab. Next: the AI
+> generation stage (Phase 3). See the [roadmap](#roadmap).
 
 ## What it does today
 
 ```powershell
-.\artpipe.cmd validate SM_Crate.ma --class prop_small --fix
+.\artpipe.cmd build out\fixtures\SM_Messy.ma --class prop_small --texture T_Messy_D.png
+# artpipe build: PASS out/build/SM_Messy/build.report.json -> Assets/Art/prop_small/SM_Messy.prefab
 ```
 
-1. **Opens** the file in Maya without a UI (`mayapy`). Script nodes are
-   never executed.
-2. **Runs 17 checks** against the rules for that asset class: topology,
-   triangle, LOD and material budgets, UVs, transforms, pivot, size, naming,
-   history.
-3. **Applies only safe fixes** (7 of them): bakes history, freezes
-   transforms, puts the pivot on the class anchor, renames default names,
-   and more. A fix refuses, with a reason, when it can't be sure: negative
-   scale, skinned meshes, a valid but conflicting name.
-4. **Saves a fixed copy, re-opens it and validates it from scratch.** The
-   source is never modified.
-5. **Writes a deterministic JSON report** (same input, same bytes) with
-   exact offenders (`|SM_Crate.f[12]`) and exit code `0` pass / `1` asset
-   failed / `2` tool error.
+`SM_Messy` is a rushed export with six problems: default names, a foreign UV
+set name, live history, an unfrozen and off-centre transform, a metre scene.
+In about 20 seconds:
 
-Example: a rushed export with six problems (default names, foreign UV set
-name, live history, unfrozen and off-centre transform, metre scene). All six
-are fixed in one run, and the re-validated file **passes**. Holes,
-non-manifold geometry, n-gons and over-budget meshes are never "fixed": the
-report says where they are, and a human decides.
+1. **Maya** (headless `mayapy`) runs 17 checks against the rules for its
+   class, applies the 6 safe fixes, saves a fixed copy, and validates it again
+   from scratch. Holes, n-gons and over-budget meshes are never "fixed":
+   the build stops and the report says where they are.
+2. It **exports a canonical FBX** with explicit, verified exporter settings.
+   Same scene, same bytes: no timestamps, no absolute paths, stable object
+   IDs. Then it validates that FBX too and writes its report next to it.
+3. **Unity** (batchmode) gates the FBX: it needs a passing report that
+   describes these exact bytes. It then imports it with the class's import
+   settings, measures what the GPU really gets (vertices after seam splits,
+   LOD vertex ratios, submeshes), imports the texture as real ASTC, and
+   creates a Prefab Variant.
+4. One **build report** links every stage by path and sha256. Every command
+   returns `0` pass / `1` asset failed / `2` tool error.
 
 ## The rules
 
-All rules live in machine-readable files in [`conventions/`](conventions/),
-not in code:
+All rules live in [`conventions/`](conventions/), not in code. C# reads them
+from a generated, hash-checked `conventions.lock.json`, and never holds a
+budget number.
 
 | File | Holds |
 |---|---|
-| [`mesh_budgets.yaml`](conventions/mesh_budgets.yaml) | 8 asset classes for low/mid Android: triangle, LOD and material budgets, size, pivot mode, UV rules, severity overrides |
-| [`naming.schema.json`](conventions/naming.schema.json) | the naming grammar `<SM\|SK>_<AssetName>[_Variant][_LODn]`, with valid and invalid examples that the tests enforce |
-| [`texture_rules.yaml`](conventions/texture_rules.yaml) | texture formats, map types and Unity import hints for Phase 2 |
+| [`mesh_budgets.yaml`](conventions/mesh_budgets.yaml) | 8 asset classes for low/mid Android: triangle and GPU-vertex budgets, LODs, materials, size, pivot, UVs, severity overrides |
+| [`naming.schema.json`](conventions/naming.schema.json) | the naming grammar `<SM\|SK>_<AssetName>[_Variant][_LODn]`, with valid and invalid examples that Python and C# tests both enforce |
+| [`texture_rules.yaml`](conventions/texture_rules.yaml) | map types (`_D _N _MS _AO _E`): color space, alpha rules, ASTC block per platform, max size per class |
+| [`fbx_export.yaml`](conventions/fbx_export.yaml) | every FBX exporter setting, versioned |
+| [`unity_import.yaml`](conventions/unity_import.yaml) | managed folder, shared materials, LOD switch heights, ModelImporter settings per class |
+| `*.schema.json` | the report contracts: Maya, Unity and build reports |
 
-**[docs/conventions.md](docs/conventions.md)** explains every rule and why
-it exists, for artists and reviewers. Its tables are generated from those
-files and from the code, and a test fails if the doc drifts.
+* **[docs/conventions.md](docs/conventions.md)** explains every Maya-side
+  rule and why it exists.
+* **[docs/unity_import.md](docs/unity_import.md)** covers the Unity side:
+  folder layout, gate, import settings, GPU budgets, textures, every check id,
+  and the Unity behaviours the design relies on.
+
+Tables in both docs are generated from these files, and tests fail if the docs drift.
 
 ## Quick start
 
-Requirements: Windows, Maya 2023+ (`mayapy`, Python 3.9; the code stays
-3.9-compatible).
+Requirements: Windows, Maya 2023+ (`mayapy`, Python 3.9), Unity 6000.5 with
+Android Build Support. The code stays Python 3.9-compatible.
 
 ```powershell
-.\artpipe.cmd py -m pip install --user -r requirements-maya.txt   # once: pyyaml, pytest
+.\artpipe.cmd py -m pip install --user -r requirements-maya.txt   # once: pyyaml, pytest, jsonschema
+.\artpipe.cmd unity setup                                           # once: URP, Linear, text assets
 .\artpipe.cmd fixtures                                              # build 45 test scenes into out\fixtures
-.\artpipe.cmd validate out\fixtures\SM_Messy.ma --class prop_small --fix
-.\artpipe.cmd test                                                  # 226 tests, ~15 s, one Maya boot
+.\artpipe.cmd build out\fixtures\SM_Messy.ma --class prop_small     # Maya -> Unity prefab
+.\artpipe.cmd test                                                  # ~450 tests, ~4 min (close the Unity Editor first)
+.\artpipe.cmd test -m "not maya and not unity"                      # pure Python only, ~2 s, any Python
 ```
 
-`artpipe.cmd` finds `mayapy` itself: `%MAYAPY%` if set, otherwise the newest
-installed Maya.
+`artpipe.cmd` finds `mayapy` (`%MAYAPY%` or the newest Maya). The Unity
+runner uses the exact version pinned in `unity/ProjectSettings` (or `%UNITY%`).
 
 | Command | Does |
 |---|---|
-| `artpipe validate FILE... --class C [--fix] [--export DIR] [--max-offenders N]` | validate (and fix) one or more `.ma` / `.mb` / `.fbx` files; `--export` writes each passing asset as deterministic FBX plus its own linked report |
-| `artpipe fixtures [DIR]` | build the deliberately broken test scenes |
-| `artpipe test [-m "not maya"]` | full suite, or the pure-Python core only (<1 s, no Maya needed) |
-| `artpipe docs [--check]` | regenerate the tables in `docs/conventions.md` |
-| `artpipe conventions --dump\|--check` | write / verify `conventions/conventions.lock.json`, the resolved rules Unity reads |
-| `artpipe unity import --class C FILE...` | gate each FBX (sidecar report, hash, settings, class) before it enters `Assets/Art/C/`, import with the class rules, measure what the GPU gets; one deterministic JSON report |
-| `artpipe unity verify` | re-check every asset under `Assets/Art` from the files, no import cache |
-| `artpipe unity setup\|test` | one-time URP/Linear project setup; Unity EditMode tests |
-| `artpipe unity-fixtures` | rebuild the golden FBX + reports the Unity tests import |
+| `artpipe build SCENE --class C [--texture T ...]` | the whole chain: Maya validate/fix/export, then Unity import; one build report |
+| `artpipe validate FILE... --class C [--fix] [--export DIR]` | Maya stage only: validate (and fix) `.ma` / `.mb` / `.fbx`; `--export` writes each passing asset as canonical FBX plus its linked report |
+| `artpipe unity import --class C FILE...` | Unity stage only: gate each FBX before it enters `Assets/Art/C/`, import with the class rules, measure, create the Prefab Variant |
+| `artpipe unity verify` | re-check every asset under `Assets/Art` from the files, with no import cache |
+| `artpipe unity setup\|test` | one-time project setup; Unity EditMode tests |
+| `artpipe conventions --dump\|--check` | write / verify `conventions/conventions.lock.json` |
+| `artpipe docs [--check]` | regenerate the tables in the docs |
+| `artpipe fixtures [DIR]` / `artpipe unity-fixtures` | build the broken test scenes / the golden FBX + reports the Unity tests import |
+| `artpipe test [-m "not maya and not unity"]` | the suite (Python, Maya, real Unity runs) |
 
 ## Layout
 
 ```
-conventions/            the rules (YAML / JSON Schema), the single source of truth
-validate/core/          pure Python, never imports Maya: rule loader, report types, paths
-validate/maya/checks/   one module per check, same contract: run(ctx) -> CheckResult
-validate/maya/fixes/    one module per safe fix: blocker(ctx, result) + apply(ctx, result)
-validate/maya/          CLI, Maya session, scene context, registry (explicit check/fix lists)
-tests/                  core unit tests (any Python) + tests/integration/ (mayapy)
-tests/fixtures/         code that builds 45 broken scenes + what each must fail before/after --fix
-docs/                   conventions.md, backlog.md (deferred issues, tagged by phase)
+conventions/                 the rules and the report contracts (YAML / JSON Schema)
+validate/core/               pure Python: rule loader, lock, report types, FBX + .ma canonicalizers
+validate/maya/               headless Maya: CLI, session, checks/, fixes/, FBX export
+pipeline/                    unity.py (batchmode runner, exit-code reconciliation), build.py (end to end)
+unity/                       Unity 6 URP project (Assets/Art is where imported assets go)
+unity/Packages/com.artpipe.importer/
+  Editor/                    gate, ModelImporter/TextureImporter rules, GPU checks, batchmode CLI
+  Tests/Editor/              EditMode tests + Fixtures~ (golden FBX + reports)
+tests/                       pure-Python tests, integration/ (mayapy), unity_editor/ (real Unity runs)
+docs/                        conventions.md, unity_import.md, backlog.md
 ```
 
 ## Design choices
 
-- **Built to be called by an agent.** Each check and fix is a small module
-  with a fixed interface and a stable id (`topology.ngons`). Output is JSON
-  with no UI. Messages say how far over a limit an asset is, or which unit
-  it was probably authored in, so the agent knows what to try next.
-- **Deterministic.** Sorted offenders, rounded floats, no timestamps,
-  repo-relative paths, and Maya's per-save UUIDs stripped from fixed `.ma`
-  files. A report is diffable and cacheable by hash.
-- **Safe auto-fixing.** A fix runs only if it is deterministic, the
-  visible result doesn't change (or the convention defines the change), and
-  no blocker applies. `fixable: true` in a report means the fix would really
-  run on that failure.
-- **Proven by tests.** Every check fails on at least one deliberately broken
-  scene, and every scene fails *exactly* its listed checks (no false
-  positives) before and after `--fix`. The suite was mutation-tested by
-  hand: bugs injected on purpose must turn it red.
+- **Built to be called by an agent.** Each stage is a CLI with stable check
+  ids, JSON output, no UI, and one exit-code contract. Messages say what to
+  do next ("move it to Assets/Art/prop_small/ or re-validate with --class
+  pickup"). Exit 1 always means "fix the asset". Crashes, licence problems
+  and a locked project are 2, never 1.
+- **Deterministic end to end.** Same input, same bytes: reports, fixed `.ma`
+  files, exported FBX, `.meta` GUIDs and new prefabs. Reports are diffable
+  and cacheable by hash, and test fixtures can be committed as golden files.
+- **Rules as data, enforced at every boundary.** One YAML source, resolved
+  once by Python into a hash-linked lock that C# reads strictly. A stale lock
+  stops a Unity import. An FBX enters the project only with a passing report
+  for its exact bytes.
+- **Measure what ships.** Vertex budgets are checked after the Unity import,
+  where UV seams and hard edges have already split vertices, and texture
+  formats are checked on the imported result. Both caught real problems
+  that Maya-side checks can't see.
+- **Probe before assuming.** Every Unity and Maya behaviour the design
+  depends on was measured first, and the surprises are written down in the docs.
+- **Proven by tests.** Every check fails on a deliberately broken input, with
+  boundary cases. The suite was mutation-tested by hand: bugs injected on
+  purpose must turn it red.
 
 Known gaps and deferred work are tracked in [docs/backlog.md](docs/backlog.md).
 
 ## Roadmap
 
 1. **Conventions + Maya validators**: done
-2. Unity import pipeline: AssetPostprocessors, presets, batchmode
+2. **Unity import pipeline**: done (gate, import rules, GPU budgets, textures, batchmode, end to end)
 3. AI generation stage: ComfyUI, image → 3D
 4. Animated store banners at scale: one template → many games
 5. MCP agent layer + docs + demo video

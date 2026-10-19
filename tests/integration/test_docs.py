@@ -16,3 +16,9 @@ def test_every_generated_block_is_present_and_known():
     text = gen_docs.DOC.read_text(encoding="utf-8")
     from validate.core import conventions as conv
     gen_docs.render(text, conv.load())  # raises on a missing or unknown block
+
+
+def test_unity_doc_has_every_generated_block():
+    from validate.core import conventions as conv
+    text = gen_docs.UNITY_DOC.read_text(encoding="utf-8")
+    gen_docs.render(text, conv.load(), gen_docs.UNITY_SECTIONS, gen_docs.UNITY_DOC.name)

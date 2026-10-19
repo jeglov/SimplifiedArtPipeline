@@ -66,7 +66,8 @@ How to read the table:
 - **Max tris** applies to **LOD0**, the version drawn closest to the camera.
   The GPU only draws triangles: a quad counts as 2 and an n-gon as n − 2.
   The real GPU cost is the vertex count *after* Unity splits vertices at UV
-  seams and hard edges. That's measured at import in Phase 2 (backlog #11).
+  seams and hard edges. Unity measures that after import against `verts_max`
+  (see [unity_import.md](unity_import.md#what-the-gpu-really-gets)).
 - **Max materials** is per mesh. Each material becomes a submesh, which is
   one draw call per copy on screen, and it breaks GPU instancing.
   200 crowd units × 2 materials = 400 draw calls, four times a low-end
@@ -180,7 +181,8 @@ exports. JPG adds a second lossy step before the GPU's own (ASTC)
 compression. Normal maps use the **OpenGL** convention (green = Y+), which
 is what Unity expects; Substance's Unreal preset exports DirectX normals and
 gives inverted lighting. Maximum sizes per class are in the class table
-above. Texture validation itself arrives in Phase 2 (backlog #22).
+above. Textures are validated and imported by the Unity package (see
+[unity_import.md](unity_import.md#textures)).
 
 ## 8. What the validator checks
 

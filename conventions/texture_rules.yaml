@@ -1,5 +1,5 @@
-# artpipe texture rules. Validated in Phase 1 (names, sizes) and consumed by
-# Unity import presets in Phase 2 (import_hints).
+# artpipe texture rules. Applied and checked by the Unity package
+# (TexturePostprocessor, texture.* checks) through conventions.lock.json.
 #
 # Target render pipeline: Unity URP, Lit or custom unlit/toon shaders.
 

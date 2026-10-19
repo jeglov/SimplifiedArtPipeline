@@ -1,7 +1,8 @@
-"""Regenerate the tables in docs/conventions.md from the YAML and the registry.
+"""Regenerate the tables in docs/conventions.md and docs/unity_import.md
+from the YAML and the registry.
 
     artpipe docs            rewrite the generated blocks in place
-    artpipe docs --check    exit 1 if the doc is out of date (used by the tests)
+    artpipe docs --check    exit 1 if a doc is out of date (used by the tests)
 
 Only the text between <!-- generated:NAME --> and <!-- /generated:NAME -->
 is rewritten; everything else is hand-written prose. Numbers in a
@@ -23,6 +24,7 @@ from validate.core import conventions as conv
 from validate.core.paths import REPO_ROOT
 
 DOC = REPO_ROOT / "docs" / "conventions.md"
+UNITY_DOC = REPO_ROOT / "docs" / "unity_import.md"
 _BLOCK = re.compile(r"(<!-- generated:(\w+) -->\n)(.*?)(<!-- /generated:\2 -->)", re.DOTALL)
 
 
@@ -91,44 +93,101 @@ def _fixes(c: conv.Conventions) -> str:
     return _table(["Order", "Fixes check", "What it changes"], rows)
 
 
+# --- docs/unity_import.md -----------------------------------------------------------
+
+def _yes(b: bool) -> str:
+    return "yes" if b else "no"
+
+
+def _unity_classes(c: conv.Conventions) -> str:
+    rows = []
+    for a in c.classes:
+        m = c.unity_import.model_for(a.name)
+        rows.append([
+            "`%s`" % a.name, "{:,}".format(a.verts_max), str(a.max_materials),
+            str(a.lods.max), str(a.texture_max_size), m["rig"],
+            str(m["skin_weights"]) if m["rig"] != "none" else "—", _yes(m["lightmap_uvs"]),
+        ])
+    return _table(["Class (folder)", "Max GPU verts (LOD0)", "Max submeshes", "Max LODs", "Max texture (px)",
+                   "Rig", "Bone influences", "Lightmap UVs"], rows)
+
+
+def _unity_model_defaults(c: conv.Conventions) -> str:
+    settings = [dict(s) for _, s in c.unity_import.model]
+    same = sorted(k for k in settings[0] if all(s[k] == settings[0][k] for s in settings))
+    rows = [["`%s`" % k, str(settings[0][k]).lower()] for k in same]
+    return _table(["Setting (same for every class)", "Value"], rows)
+
+
+def _unity_textures(c: conv.Conventions) -> str:
+    t = c.textures
+    rows = [["`_%s`" % x.suffix, x.description, x.color_space, x.alpha,
+             dict(x.formats)["android"], dict(x.formats)["ios"]] for x in t.types]
+    return (_table(["Suffix", "Map", "Color space", "Alpha", "Android", "iOS"], rows) +
+            "\nMipmaps: %s. Power of two: %s. Minimum size: %d px. Outside class folders "
+            "(shared atlases): max %d px.\n" % (_yes(t.mipmaps), _yes(t.power_of_two), t.min_size, t.default_max_size))
+
+
+def _unity_lods(c: conv.Conventions) -> str:
+    u = c.unity_import
+    rows = [["LOD%d → LOD%d" % (i, i + 1), _num(h)] for i, h in enumerate(u.lod_transitions)]
+    rows.append(["last LOD culled below", _num(u.lod_cull_below)])
+    return _table(["Switch", "Screen height"], rows)
+
+
 SECTIONS: Dict[str, Callable[[conv.Conventions], str]] = {
     "classes": _classes, "textures": _textures, "checks": _checks, "fixes": _fixes,
 }
+UNITY_SECTIONS: Dict[str, Callable[[conv.Conventions], str]] = {
+    "unity_classes": _unity_classes, "unity_model_defaults": _unity_model_defaults,
+    "unity_textures": _unity_textures, "unity_lods": _unity_lods,
+}
+DOCS = ((DOC, SECTIONS), (UNITY_DOC, UNITY_SECTIONS))
 
 
-def render(text: str, conventions: conv.Conventions) -> str:
+def render(text: str, conventions: conv.Conventions,
+           sections: Optional[Dict[str, Callable[[conv.Conventions], str]]] = None,
+           doc_name: str = DOC.name) -> str:
     """Return `text` with every generated block rebuilt. Raises on unknown/missing blocks."""
+    sections = SECTIONS if sections is None else sections
     found = set()
 
     def replace(m: "re.Match[str]") -> str:
         name = m.group(2)
-        if name not in SECTIONS:
-            raise ValueError("unknown generated block %r in %s" % (name, DOC.name))
+        if name not in sections:
+            raise ValueError("unknown generated block %r in %s" % (name, doc_name))
         found.add(name)
-        return m.group(1) + SECTIONS[name](conventions) + m.group(4)
+        return m.group(1) + sections[name](conventions) + m.group(4)
 
     out = _BLOCK.sub(replace, text)
-    missing = sorted(set(SECTIONS) - found)
+    missing = sorted(set(sections) - found)
     if missing:
-        raise ValueError("%s has no generated block(s) %s" % (DOC.name, missing))
+        raise ValueError("%s has no generated block(s) %s" % (doc_name, missing))
     return out
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     p = argparse.ArgumentParser(prog="validate.maya.gen_docs", description=__doc__.splitlines()[0])
-    p.add_argument("--check", action="store_true", help="exit 1 if docs/conventions.md is out of date")
+    p.add_argument("--check", action="store_true", help="exit 1 if a generated doc is out of date")
     args = p.parse_args(argv)
-    current = DOC.read_text(encoding="utf-8")
-    fresh = render(current, conv.load())
+    conventions = conv.load()
+    stale = []
+    for doc, sections in DOCS:
+        current = doc.read_text(encoding="utf-8")
+        fresh = render(current, conventions, sections, doc.name)
+        if fresh == current:
+            continue
+        stale.append(doc.name)
+        if not args.check:
+            with doc.open("w", encoding="utf-8", newline="\n") as fh:
+                fh.write(fresh)
     if args.check:
-        if fresh != current:
-            print("docs/conventions.md is out of date: run `artpipe docs`", file=sys.stderr)
+        if stale:
+            print("out of date: %s. Run `artpipe docs`" % ", ".join(stale), file=sys.stderr)
             return 1
-        print("docs/conventions.md is up to date")
+        print("docs are up to date")
         return 0
-    with DOC.open("w", encoding="utf-8", newline="\n") as fh:
-        fh.write(fresh)
-    print("rewrote generated blocks in docs/conventions.md" if fresh != current else "already up to date")
+    print("rewrote generated blocks in %s" % ", ".join(stale) if stale else "already up to date")
     return 0
 
 

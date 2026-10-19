@@ -6,7 +6,7 @@ LOD0 by budget.lods.
 
 Triangles, not faces: the GPU only draws triangles, a quad costs 2 and an
 ngon n-2. Note the real GPU cost is the vertex count AFTER Unity splits
-vertices on UV seams and hard edges (backlog #11, measured in Phase 2).
+vertices on UV seams and hard edges: Unity checks that after import (unity.vertex_budget).
 """
 from __future__ import annotations
 

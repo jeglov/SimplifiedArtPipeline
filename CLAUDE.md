@@ -8,25 +8,18 @@
 
 ## Roadmap
 1. Conventions + Maya validators (done)
-2. **Unity import pipeline** (AssetPostprocessors, presets, batchmode) ← current phase
-3. AI generation stage (ComfyUI, image→3D)
+2. Unity import pipeline (done)
+3. **AI generation stage** (ComfyUI, image→3D) ← next phase, deliverables not defined yet: agree them with the user first
 4. Animated store banners at scale (one template → many games)
 5. MCP agent layer + docs + demo video
 
 Deferred issues are tracked in [docs/backlog.md](docs/backlog.md), tagged by stage (P1.3 … P5). Add new deferred issues there. Don't silently drop them.
 
-## Phase 2 deliverables (in this order, split to be confirmed with the user)
-1. Unity project skeleton in `unity/`: URP, embedded package `com.artpipe.importer` with an Editor-only `.asmdef`, gitignore and `.gitattributes` rules for Unity
-2. `conventions.lock.json` (deterministic dump of `conventions/`) plus a typed C# loader (Newtonsoft). No budget numbers in C#. Stale-lock test (backlog #10)
-3. FBX export from Maya with explicit, versioned exporter settings. The Maya report sits next to the FBX, linked by sha256 (backlog #27)
-4. Import gate: an `AssetPostprocessor` refuses or flags an FBX whose Maya report is missing, failed or hash-mismatched
-5. Model import: `ModelImporter` settings per class, LODGroup from `_LODn`, post-import vertex/submesh/LOD-ratio budgets (backlog #11)
-6. Textures driven by `texture_rules.yaml`: ASTC per platform, sRGB/linear, max size, POT, alpha, names (backlogs #14, #22)
-7. Batchmode CLI `-executeMethod Artpipe.Cli.Import`: exit codes 0/1/2 and a deterministic JSON report
-8. End to end: Maya validate/fix → FBX → Unity batch import → combined report. A messy fixture comes out as a clean prefab
-9. Unity Test Framework EditMode tests fed by Phase 1 fixtures, `docs/unity_import.md`, README update
-
-Phase 1 (conventions, 17 checks, 7 fixes, 226 tests, generated docs) is described in README.md and docs/conventions.md.
+## What exists (Phases 1 and 2)
+- Phase 1: conventions, headless Maya validator (17 checks, 7 safe fixes), deterministic reports. See docs/conventions.md.
+- Phase 2: canonical FBX export, Unity 6 URP project with the `com.artpipe.importer` package (import gate, per-class ModelImporter/TextureImporter rules, GPU vertex budgets, Prefab Variants), batchmode `artpipe unity import|verify`, and `artpipe build` (Maya scene to Unity prefab). See docs/unity_import.md and README.md.
+- Report contracts: `conventions/*.schema.json`. Rules reach C# only through `conventions.lock.json` (`artpipe conventions --dump`).
+- Tests: `artpipe test` (~450, ~4 min, close the Unity Editor first); fast run `-m "not maya and not unity"`.
 
 ## Architecture rules (non-negotiable)
 - Each check is a small, independent module, and all checks share the same interface:
@@ -35,6 +28,7 @@ Phase 1 (conventions, 17 checks, 7 fixes, 226 tests, generated docs) is describe
 - An AI agent will call checks and fixes as tools later, so outputs must be **deterministic**, **machine-readable** (JSON) and need **no UI**.
 - Code must stay compatible with Python 3.9. Keep pure-Python logic in `validate/core/` so it can be tested without Maya.
 - Rules come only from `conventions/`. C# reads `conventions.lock.json` and never duplicates numbers.
+- Every Unity or Maya behaviour the design depends on is probed first and recorded (docs/unity_import.md lists the Unity ones).
 - Unity importers must be idempotent (re-import changes nothing) and deterministic despite Unity's own nondeterminism (`.meta` GUIDs, import order).
 - Every check and fix is proven by a test, including a boundary case. Mutation-test the important ones.
 
@@ -63,4 +57,4 @@ Phase 1 (conventions, 17 checks, 7 fixes, 226 tests, generated docs) is describe
 - **Commits** only when the user says "commit". Conventional Commits (`feat(unity): …`), body explains the why, every commit runnable.
 - **Reviewer questions:** at the end of every step, append numbered questions to `notes/reviewer_questions.md` (format: "Answer so far" + "Dig deeper") and say which numbers were added.
 - **Flag anything a senior TA reviewer at a mobile studio would judge as amateur.**
-- **End every reply with a running Phase 2 progress checklist.**
+- **End every reply with a running progress checklist for the current phase.**
