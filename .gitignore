@@ -15,3 +15,6 @@ incrementalSave/
 
 # Editor
 .vscode/
+
+# Personal study notes, never committed
+notes/

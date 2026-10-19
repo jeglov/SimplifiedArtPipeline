@@ -31,12 +31,15 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 18 | P5 | Only tested on Maya 2023 (Python 3.9). Maya 2025+ uses Python 3.11 | Studios run newer Maya | Test matrix on 2023 and 2025+ if available. Code stays 3.9-compatible |
 | 19 | P5 | The package is found through pytest `pythonpath = ["."]`, not installed | Fine for a repo tool, odd for reuse | Revisit if artpipe needs to be pip-installable |
 | 20 | P1.3 | Hierarchy rules are documented in the schema but not enforced: at most one root group named like the file, `_LODn` present on all meshes or none, contiguous LOD levels, SM/SK prefix matching the class `mesh_types` | Unity's LODGroup auto-setup silently breaks on mismatched suffixes | Implement in the `naming.convention` check (cross-node rules, beyond regex) |
-| 21 | P1.3 | `max_materials` is in the budgets, but no check is planned for it | Materials per mesh = draw calls, the main mobile cost for small props | Add a `budget.materials` check (16th check) |
 | 22 | P2 | Texture rules (POT, max size, alpha, suffix) only exist as data | Phase 1 validates meshes only | Texture validator in P2 (Python + Pillow, or in the Unity TexturePostprocessor) |
 | 23 | P2 | Budgets are educated defaults, not measured on a device | A reviewer may ask "how did you pick 500 tris?" | Profile a test scene on a low-end Android device (Unity Profiler / Frame Debugger) and record the numbers in `docs/conventions.md` |
+| 24 | P1.3 | `budget.materials` counts materials per mesh, but faces with NO material on a partly assigned mesh aren't detected | Those faces import into Unity with no material and render pink | Compare the faces covered by all shading engines with the mesh's face count, and report the uncovered faces as offenders |
+| 25 | P1.3 | `uv.unit_square` tolerance is a fixed `1e-4` | Maya's own default cylinder overshoots to u = 1.0019, invisible at the texture sizes we ship | Consider a per-class tolerance of half a texel at `texture_max_size` (prop_small: 1/512) and keep the fixed epsilon as the floor |
+| 26 | P2 | Only UV0 is checked for overlap. A hand-authored UV1 (lightmap) must NOT overlap | Overlapping lightmap UVs bake light from one surface onto another | If UV1 exists, check it with overlap never allowed. Otherwise rely on Unity's "Generate Lightmap UVs" |
 
 ## Done
 
 | # | Stage | Issue | Resolved in |
 |---|---|---|---|
+| 21 | P1.3 | No check for `max_materials` | `budget.materials` check (step 3.3) |
 | - | P1.0 | Project was inside a git repo rooted at the user's home folder | `git init` in `ArtPipeline/` (initial commit) |

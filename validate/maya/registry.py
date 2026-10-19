@@ -10,11 +10,17 @@ from typing import List, Tuple
 
 from validate.core.result import CheckResult
 from validate.maya.checks import (
+    budget_lods,
+    budget_materials,
+    budget_tris,
     scene_has_meshes,
     topology_lamina_faces,
     topology_ngons,
     topology_non_manifold,
     topology_open_borders,
+    uv_overlap,
+    uv_present,
+    uv_unit_square,
 )
 
 CHECKS = (
@@ -24,6 +30,14 @@ CHECKS = (
     topology_lamina_faces,
     topology_open_borders,
     topology_ngons,
+    # budget
+    budget_tris,
+    budget_lods,
+    budget_materials,
+    # uv
+    uv_present,
+    uv_unit_square,
+    uv_overlap,
 )
 
 _REQUIRED = ("ID", "SEVERITY", "FIXABLE", "DESCRIPTION", "run")

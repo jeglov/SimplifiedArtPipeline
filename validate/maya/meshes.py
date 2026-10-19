@@ -21,15 +21,43 @@ import maya.api.OpenMaya as om
 from maya import cmds
 
 
-def mesh_fn(transform: str) -> om.MFnMesh:
-    """MFnMesh for the (first, non-intermediate) mesh shape under `transform`."""
+def mesh_shape(transform: str) -> str:
+    """Full path of the (first, non-intermediate) mesh shape under `transform`."""
     shapes = sorted(cmds.listRelatives(transform, shapes=True, type="mesh",
                                        noIntermediate=True, fullPath=True) or [])
     if not shapes:
         raise ValueError("%s has no mesh shape" % transform)
+    return shapes[0]
+
+
+def mesh_fn(transform: str) -> om.MFnMesh:
+    """MFnMesh for the mesh shape under `transform`."""
     sel = om.MSelectionList()
-    sel.add(shapes[0])
+    sel.add(mesh_shape(transform))
     return om.MFnMesh(sel.getDagPath(0))
+
+
+def short_name(path: str) -> str:
+    """"|SM_Crate|SM_Crate_LOD0" -> "SM_Crate_LOD0"."""
+    return path.rsplit("|", 1)[-1]
+
+
+def tri_count(transform: str) -> int:
+    """Triangles the GPU will draw: every n-gon counts as n-2 triangles."""
+    # getTriangles() -> (triangles per face, vertex ids). Summing the first
+    # array is one API call instead of a per-face loop.
+    return sum(mesh_fn(transform).getTriangles()[0])
+
+
+def uv0_set(ctx) -> str:
+    """Name of the UV set that becomes UV0 in Unity (the base color UVs), e.g. "map1"."""
+    return ctx.asset_class.uv.required_sets[0]
+
+
+def lod_level(ctx, transform: str) -> int:
+    """LOD level from the name suffix. No suffix = a single-LOD asset = level 0."""
+    level = ctx.conventions.naming.lod_level(short_name(transform))
+    return 0 if level is None else level
 
 
 def component_names(transform: str, kind: str, indices: Iterable[int]) -> List[str]:
