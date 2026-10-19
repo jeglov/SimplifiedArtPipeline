@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/artpipe/artpipe/conventions/unity_report.schema.json",
+  "title": "artpipe Unity import report",
+  "description": "Written by `artpipe unity import` / `artpipe unity verify` (Artpipe.Cli.Import in batchmode). One report per run: environment preflight plus one entry per asset. Every report the Unity tests produce is validated against this schema.",
+  "$comment": "Result entries have the same shape as the Maya report's check results (report.schema.json), so one parser reads both.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tool", "mode", "status", "tool_error", "preflight", "assets", "summary"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "tool": { "type": "string", "minLength": 1 },
+    "mode": { "enum": ["import", "verify"] },
+    "status": { "enum": ["pass", "fail", "error"] },
+    "tool_error": { "type": ["string", "null"] },
+    "preflight": { "type": "array", "items": { "$ref": "#/$defs/result" } },
+    "assets": { "type": "array", "items": { "$ref": "#/$defs/asset" } },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assets", "passed", "failed", "errors", "warnings", "preflight_failed"],
+      "properties": {
+        "assets": { "$ref": "#/$defs/count" },
+        "passed": { "$ref": "#/$defs/count" },
+        "failed": { "$ref": "#/$defs/count" },
+        "errors": { "$ref": "#/$defs/count" },
+        "warnings": { "$ref": "#/$defs/count" },
+        "preflight_failed": { "$ref": "#/$defs/count" }
+      }
+    }
+  },
+
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "kind", "asset_class", "status", "imported", "source", "results"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^Assets/" },
+        "kind": { "enum": ["model", "texture"] },
+        "asset_class": { "type": ["string", "null"] },
+        "status": { "enum": ["pass", "fail"] },
+        "imported": { "type": "boolean", "description": "false when the gate refused the file before it entered the project" },
+        "source": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "sha256"],
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+              }
+            }
+          ]
+        },
+        "results": { "type": "array", "items": { "$ref": "#/$defs/result" } }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "passed", "severity", "message", "fixable", "metrics", "offenders"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$" },
+        "passed": { "type": "boolean" },
+        "severity": { "enum": ["error", "warning", "info"] },
+        "message": { "type": "string" },
+        "fixable": { "type": "boolean" },
+        "metrics": { "type": "object" },
+        "offenders": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

@@ -104,6 +104,54 @@ namespace Artpipe.Tests
         }
     }
 
+    public class CliImportArgsTests
+    {
+        [Test]
+        public void ReadsClassAndRepeatedFiles()
+        {
+            var a = CliArgs.Parse(new[] { "--report", "C:/r.json", "--class", "prop_small", "--file", "C:/a/SM_A.fbx", "--file", "C:/a/T_A_D.png" });
+            Assert.IsNull(a.Error);
+            Assert.AreEqual("prop_small", a.AssetClass);
+            CollectionAssert.AreEqual(new[] { "C:/a/SM_A.fbx", "C:/a/T_A_D.png" }, a.Files);
+        }
+
+        [Test]
+        public void RelativeInputFileIsRefused()
+        {
+            StringAssert.StartsWith("--file must be an absolute path",
+                CliArgs.Parse(new[] { "--report", "C:/r.json", "--file", "out/SM_A.fbx" }).Error);
+        }
+
+        [Test]
+        public void GuidIsDerivedFromThePathOnly()
+        {
+            var a = Cli.DeterministicGuid("Assets/Art/prop_small/SM_A.fbx");
+            Assert.AreEqual(a, Cli.DeterministicGuid("Assets/Art/prop_small/SM_A.fbx"), "same path, same GUID, any machine");
+            Assert.AreNotEqual(a, Cli.DeterministicGuid("Assets/Art/prop_small/SM_B.fbx"));
+            StringAssert.IsMatch("^[0-9a-f]{32}$", a);
+        }
+
+        [Test]
+        public void AnyFailedAssetMakesTheRunFail()
+        {
+            var report = new ImportReport();
+            report.Assets.Add(new AssetReport { Path = "Assets/Art/x/a.fbx", Kind = "model" });
+            Assert.AreEqual(ExitCode.Pass, report.ExitCode);
+            report.Assets[0].Results.Add(new CheckResult { Id = "unity.vertex_budget", Passed = false, Severity = Severity.Error });
+            Assert.AreEqual("fail", report.Status);
+            Assert.AreEqual(ExitCode.Fail, report.ExitCode);
+        }
+
+        [Test]
+        public void ToolErrorWinsOverAssetFailure()
+        {
+            var report = new ImportReport { ToolError = "unknown --class" };
+            report.Assets.Add(new AssetReport { Path = "Assets/Art/x/a.fbx", Kind = "model",
+                Results = { new CheckResult { Id = "gate.hash_match", Passed = false, Severity = Severity.Error } } });
+            Assert.AreEqual(ExitCode.ToolError, report.ExitCode);
+        }
+    }
+
     public class PreflightTests
     {
         [Test]

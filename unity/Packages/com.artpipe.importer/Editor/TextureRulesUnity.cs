@@ -137,6 +137,9 @@ namespace Artpipe
         /// <summary>The GPU format the active build target really got (after import only).</summary>
         public static CheckResult PlatformFormat(Texture2D tex, ConventionsLock c, string assetPath)
         {
+            if (tex == null)
+                return Result("texture.platform_format", false, Severity.Error, assetPath,
+                    "Unity produced no Texture2D from this file (see the import log).");
             var type = MapType(assetPath, c.Textures);
             if (type == null)
                 return Result("texture.platform_format", false, Severity.Error, assetPath, "Unknown map type: no expected format.");

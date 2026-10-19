@@ -11,9 +11,9 @@ def canonical(data) -> bytes:
     return (json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def test_import_stub_passes_and_writes_a_canonical_report(tmp_path):
-    report = tmp_path / "a" / "import.report.json"
-    assert u.main(["import", "--report", str(report)]) == u.EXIT_PASS
+def test_verify_passes_and_writes_a_canonical_report(tmp_path):
+    report = tmp_path / "a" / "verify.report.json"
+    assert u.main(["verify", "--report", str(report)]) == u.EXIT_PASS
     raw = report.read_bytes()
     data = json.loads(raw)
     assert data["status"] == "pass"
@@ -24,10 +24,10 @@ def test_import_stub_passes_and_writes_a_canonical_report(tmp_path):
     assert raw == canonical(data)
 
 
-def test_import_report_is_deterministic(tmp_path):
+def test_verify_report_is_deterministic(tmp_path):
     first, second = tmp_path / "1.json", tmp_path / "2.json"
-    assert u.main(["import", "--report", str(first)]) == u.EXIT_PASS
-    assert u.main(["import", "--report", str(second)]) == u.EXIT_PASS
+    assert u.main(["verify", "--report", str(first)]) == u.EXIT_PASS
+    assert u.main(["verify", "--report", str(second)]) == u.EXIT_PASS
     assert first.read_bytes() == second.read_bytes()
 
 
@@ -47,11 +47,11 @@ def project_snapshot():
     return out
 
 
-def test_import_run_leaves_the_project_untouched(tmp_path):
+def test_verify_run_leaves_the_project_untouched(tmp_path):
     # Idempotence at the project level. Found the hard way: the first GUI
     # open ran URP migrations that batchmode hadn't, and rewrote 3 settings files.
     before = project_snapshot()
-    assert u.main(["import", "--report", str(tmp_path / "r.json")]) == u.EXIT_PASS
+    assert u.main(["verify", "--report", str(tmp_path / "r.json")]) == u.EXIT_PASS
     after = project_snapshot()
     changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
-    assert not changed, "the import run modified project files: %s" % changed
+    assert not changed, "the verify run modified project files: %s" % changed

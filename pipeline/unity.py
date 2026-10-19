@@ -1,8 +1,12 @@
 """Run the Unity side of artpipe headless (batchmode) and normalise its result.
 
-    artpipe unity setup                     one-time project setup (URP, Linear, text assets)
-    artpipe unity import [--report PATH]    import stage (step 1: environment preflight only)
-    artpipe unity test [--results PATH]     EditMode tests (Unity Test Framework)
+    artpipe unity setup                                one-time project setup (URP, Linear, text assets)
+    artpipe unity import --class C FILE... [--report]  gate, copy into Assets/Art/C/, import, measure
+    artpipe unity verify [--report PATH]               re-check every managed asset, no import cache
+    artpipe unity test [--results PATH]                EditMode tests (Unity Test Framework)
+
+FILE: an FBX exported by `artpipe validate --export` (its X.fbx.report.json
+sidecar must sit next to it) or a texture (T_<Name>_<D|N|MS|AO|E>.png|tga).
 
 Same exit contract as the Maya CLI: 0 pass / 1 asset failed / 2 tool error.
 
@@ -22,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -116,6 +121,13 @@ def run_unity(cmd: Sequence[str]) -> int:
         raise ToolError("Unity did not finish within %d s" % TIMEOUT_S)
 
 
+# Licence failures stop Unity before any of our code runs, so they can only
+# be recognised from the log. (A working run also logs licensing noise such
+# as "Access token is unavailable", so the patterns are deliberately narrow.)
+_LICENCE = re.compile(r"No valid Unity Editor license|license (?:is )?(?:not active|has expired)"
+                      r"|Failed to activate(?: the)? licen[cs]e", re.IGNORECASE)
+
+
 def log_hint(log: Path) -> str:
     """A short, actionable hint for the failures we know how to recognise."""
     try:
@@ -126,6 +138,9 @@ def log_hint(log: Path) -> str:
         return " Another Unity Editor has this project open: close it and retry."
     if "Scripts have compiler errors" in text or "error CS" in text:
         return " The C# code doesn't compile: search the log for 'error CS'."
+    if _LICENCE.search(text):
+        return (" Unity has no usable licence: sign in to Unity Hub (Personal) or activate a"
+                " licence for batchmode, then retry.")
     return ""
 
 
@@ -175,6 +190,13 @@ def rel(path: Path) -> str:
         return path.as_posix()
 
 
+def absolute(path) -> Path:
+    """Absolute path, existing or not. Not Path.resolve(): on Windows before
+    Python 3.10 it returns a RELATIVE path for a file that doesn't exist yet
+    (caught by a test under mayapy 3.9), and Unity needs absolute paths."""
+    return Path(os.path.abspath(str(path)))
+
+
 def fresh(path: Path) -> Path:
     """Delete a previous output so a stale file can never pass for a new one."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -192,16 +214,29 @@ def cmd_setup(unity: Path, args: argparse.Namespace) -> Tuple[int, str]:
     return EXIT_PASS, "project setup applied"
 
 
+def cli_command(unity: Path, log: Path, report: Path, extra: Sequence[str] = ()) -> List[str]:
+    return (base_command(unity, log)
+            + ["-executeMethod", "Artpipe.Cli.Import", "-quit", "--report", str(report)] + list(extra))
+
+
 def cmd_import(unity: Path, args: argparse.Namespace) -> Tuple[int, str]:
-    report = fresh(Path(args.report).resolve())
+    report = fresh(absolute(args.report))
     log = fresh(OUT / "import.log")
-    rc = run_unity(base_command(unity, log)
-                   + ["-executeMethod", "Artpipe.Cli.Import", "-quit", "--report", str(report)])
-    return reconcile(rc, report, log)
+    extra = ["--class", args.asset_class]
+    for f in args.files:
+        # Absolute: Unity's working directory is the project, not ours.
+        extra += ["--file", str(absolute(f))]
+    return reconcile(run_unity(cli_command(unity, log, report, extra)), report, log)
+
+
+def cmd_verify(unity: Path, args: argparse.Namespace) -> Tuple[int, str]:
+    report = fresh(absolute(args.report))
+    log = fresh(OUT / "verify.log")
+    return reconcile(run_unity(cli_command(unity, log, report)), report, log)
 
 
 def cmd_test(unity: Path, args: argparse.Namespace) -> Tuple[int, str]:
-    results = fresh(Path(args.results).resolve())
+    results = fresh(absolute(args.results))
     log = fresh(OUT / "test.log")
     # No -quit: -runTests quits by itself, and -quit would end Unity before
     # the tests run.
@@ -214,8 +249,12 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="artpipe unity", description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("setup", help="one-time project setup (URP, Linear, text assets)")
-    imp = sub.add_parser("import", help="import stage (step 1: preflight only)")
+    imp = sub.add_parser("import", help="gate, copy into Assets/Art/<class>/, import and measure")
+    imp.add_argument("files", nargs="+", help="FBX (with its .fbx.report.json sidecar) or texture files")
+    imp.add_argument("--class", dest="asset_class", required=True, help="destination class folder")
     imp.add_argument("--report", default=str(OUT / "import.report.json"))
+    ver = sub.add_parser("verify", help="re-check every managed asset (no import cache)")
+    ver.add_argument("--report", default=str(OUT / "verify.report.json"))
     tst = sub.add_parser("test", help="EditMode tests")
     tst.add_argument("--results", default=str(OUT / "editmode-results.xml"))
     return p.parse_args(argv)
@@ -228,7 +267,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if project_locked():
             raise ToolError("a Unity Editor has %s open. Close it and retry (only one Unity "
                             "may open a project at a time)" % rel(PROJECT))
-        code, message = {"setup": cmd_setup, "import": cmd_import, "test": cmd_test}[args.command](unity, args)
+        commands = {"setup": cmd_setup, "import": cmd_import, "verify": cmd_verify, "test": cmd_test}
+        code, message = commands[args.command](unity, args)
     except ToolError as exc:
         code, message = EXIT_TOOL_ERROR, str(exc)
     print("artpipe unity: %s" % message, file=sys.stdout if code == EXIT_PASS else sys.stderr)

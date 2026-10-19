@@ -31,13 +31,15 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 36 | P2 | ASCII FBX is bigger and slower to parse than binary | Measured: 12 KB for a 12-tri cube, 135 KB for the 940-tri LOD fixture (~140 bytes per triangle), so a 5k-tri character is ~0.7 MB. Import time is not measured yet | Measure file size and Unity import time per class in step 5. Binary FBX would need a different determinism strategy (hash a canonical ASCII twin) |
 | 37 | P2 | The conventions custom dependency is registered on domain reload and by the CLI, not when a YAML file changes while the Editor is open | An artist editing rules in an open Editor sees old verdicts until the next script reload | The CLI always registers before importing (authoritative path). Optionally a FileSystemWatcher on conventions/ in P5 |
 | 38 | P5 | Sidecar reports are not signed: anyone can write a "pass" report with the right sha256 | The gate proves consistency, not provenance | Sign reports (HMAC with a pipeline secret, or Sigstore-style signatures) when agents from several teams write into one project |
-| 39 | P2 | An FBX that arrives in the same refresh as its sidecar is imported twice (the sidecar is a declared dependency, so it triggers a second import) | Doubles import time for batches | The batchmode CLI imports sidecars first, then the FBX files (step 7) |
 | 40 | P3 | Texture checks run in Unity only; a texture isn't validated before it reaches the project | An AI-generated texture with the wrong size or alpha is only caught at import | Run the same rules in Python (a pure PNG/TGA header reader, no Pillow) at generation time in P3 |
+| 41 | P5 | `verify` reports FBX and textures, but not orphans: a sidecar whose FBX was deleted, or a `.meta` left behind | Stale files confuse the next agent run | Report orphan sidecars and metas as warnings in verify mode |
+| 42 | P5 | The CLI has no `remove` command: deleting an asset is a manual step | An agent replacing an asset under a new name leaves the old one behind | `artpipe unity remove PATH...` through AssetDatabase.DeleteAsset, with references checked first |
 
 ## Done
 
 | # | Stage | Issue | Resolved in |
 |---|---|---|---|
+| 39 | P2 | FBX and sidecar arriving in one refresh import the FBX twice | `artpipe unity import` copies and imports sidecars first, then the FBX (P2 step 7) |
 | 33 | P2 | `-nographics` not proven for every import path | Probed and tested: with no GPU device, the Android target still gets real ASTC_6x6 / ASTC_4x4 (P2 step 6) |
 | 22 | P2 | Texture rules (POT, size, alpha, name) existed only as data | `TextureRulesUnity.SourceChecks`: texture.name, source_format, power_of_two, min_size, square, source_size (warning), alpha; plus texture.platform_format on the imported result (P2 step 6) |
 | 14 | P2 | `import_hints` had no consumer | `TexturePostprocessor` applies type, sRGB/linear, alpha source, opacity vs data alpha, mipmaps, class max size, and Android/iOS ASTC overrides from the lock (P2 step 6) |

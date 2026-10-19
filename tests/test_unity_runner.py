@@ -155,5 +155,42 @@ def test_locked_project_is_a_tool_error_before_unity_starts(monkeypatch, capsys)
     monkeypatch.setattr(u, "find_unity", lambda: Path("Unity.exe"))
     monkeypatch.setattr(u, "project_locked", lambda: True)
     monkeypatch.setattr(u, "run_unity", lambda cmd: pytest.fail("Unity must not be launched"))
-    assert u.main(["import"]) == u.EXIT_TOOL_ERROR
+    assert u.main(["verify"]) == u.EXIT_TOOL_ERROR
     assert "Close it and retry" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("line", [
+    "No valid Unity Editor license found. Please activate your license.",
+    "[Licensing::Module] Error: License is not active",
+    "Failed to activate the license",
+])
+def test_licence_failure_gets_a_hint(tmp_path, line):
+    log = tmp_path / "unity.log"
+    log.write_text("startup\n%s\n" % line, encoding="utf-8")
+    code, msg = u.reconcile(1, tmp_path / "none.json", log)
+    assert code == u.EXIT_TOOL_ERROR  # never "asset failed"
+    assert "licence" in msg
+
+
+def test_normal_licensing_noise_is_not_a_licence_failure(tmp_path):
+    # Logged by every successful run on this machine (probed in step 1).
+    log = tmp_path / "unity.log"
+    log.write_text("[Licensing::Module] Error: Access token is unavailable; failed to update\n", encoding="utf-8")
+    assert "licence" not in u.reconcile(1, tmp_path / "none.json", log)[1]
+
+
+def test_import_passes_absolute_files_and_class(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake_run(cmd):
+        seen["cmd"] = cmd
+        return 2
+
+    monkeypatch.setattr(u, "find_unity", lambda: Path("Unity.exe"))
+    monkeypatch.setattr(u, "project_locked", lambda: False)
+    monkeypatch.setattr(u, "run_unity", fake_run)
+    u.main(["import", "--class", "prop_small", "rel/SM_A.fbx", "--report", str(tmp_path / "r.json")])
+    cmd = seen["cmd"]
+    assert cmd[cmd.index("--class") + 1] == "prop_small"
+    f = Path(cmd[cmd.index("--file") + 1])
+    assert f.is_absolute() and f.name == "SM_A.fbx"

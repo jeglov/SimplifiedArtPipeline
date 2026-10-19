@@ -73,7 +73,10 @@ installed Maya.
 | `artpipe test [-m "not maya"]` | full suite, or the pure-Python core only (<1 s, no Maya needed) |
 | `artpipe docs [--check]` | regenerate the tables in `docs/conventions.md` |
 | `artpipe conventions --dump\|--check` | write / verify `conventions/conventions.lock.json`, the resolved rules Unity reads |
-| `artpipe unity setup\|import\|test` | run the Unity project headless (Phase 2, in progress) |
+| `artpipe unity import --class C FILE...` | gate each FBX (sidecar report, hash, settings, class) before it enters `Assets/Art/C/`, import with the class rules, measure what the GPU gets; one deterministic JSON report |
+| `artpipe unity verify` | re-check every asset under `Assets/Art` from the files, no import cache |
+| `artpipe unity setup\|test` | one-time URP/Linear project setup; Unity EditMode tests |
+| `artpipe unity-fixtures` | rebuild the golden FBX + reports the Unity tests import |
 
 ## Layout
 
