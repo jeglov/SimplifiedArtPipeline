@@ -4,6 +4,7 @@ rem
 rem   artpipe validate FILE [FILE ...] --class prop_small [--out out] [--max-offenders N]
 rem   artpipe fixtures [OUT_DIR]          build the test scenes (default out\fixtures)
 rem   artpipe test [PYTEST_ARGS]          run the test suite
+rem   artpipe docs [--check]              regenerate the tables in docs\conventions.md
 rem   artpipe py [ARGS]                   raw mayapy, e.g. "artpipe py -m pip list"
 rem
 rem mayapy comes from %MAYAPY% if set, otherwise the newest installed
@@ -46,12 +47,13 @@ goto collect
 :dispatch
 if /i "%CMD%"=="validate" "%MAYAPY%" -m validate.maya.cli %ARGS% & goto done
 if /i "%CMD%"=="fixtures" "%MAYAPY%" "%ROOT%\tests\fixtures\broken_meshes.py" %ARGS% & goto done
+if /i "%CMD%"=="docs" "%MAYAPY%" -m validate.maya.gen_docs %ARGS% & goto done
 if /i "%CMD%"=="test" "%MAYAPY%" -m pytest -q "%ROOT%\tests" %ARGS% & goto done
 if /i "%CMD%"=="py" "%MAYAPY%" %ARGS% & goto done
 echo artpipe: unknown command "%CMD%" 1>&2
 
 :usage
-echo usage: artpipe validate^|fixtures^|test^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
+echo usage: artpipe validate^|fixtures^|test^|docs^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
 exit /b 2
 
 :done

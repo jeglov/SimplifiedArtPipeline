@@ -19,6 +19,8 @@ from validate.maya.meshes import mesh_fn, mesh_shape, plural, uv0_set
 
 ID = "uv.overlap"
 SEVERITY = Severity.ERROR  # when overlap is not allowed; see run()
+# Shown instead of SEVERITY in docs/conventions.md (validate/maya/gen_docs.py).
+SEVERITY_DOC = "info (error where the class sets overlap_allowed: false)"
 FIXABLE = False
 DESCRIPTION = "UV0 faces don't overlap (reported as info where the class allows overlap)."
 
