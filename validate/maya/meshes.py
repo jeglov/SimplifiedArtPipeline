@@ -49,6 +49,55 @@ def tri_count(transform: str) -> int:
     return sum(mesh_fn(transform).getTriangles()[0])
 
 
+def hierarchy(ctx) -> List[str]:
+    """Every transform from the scene roots down to each mesh, sorted.
+
+    "|SM_Crate|SM_Crate_LOD0" -> ["|SM_Crate", "|SM_Crate|SM_Crate_LOD0"].
+    Parent groups matter as much as meshes: Unity imports them as
+    GameObjects with their own transforms.
+    """
+    nodes = set()
+    for mesh in ctx.meshes:
+        parts = mesh.split("|")[1:]  # full path starts with "|"
+        for i in range(1, len(parts) + 1):
+            nodes.add("|" + "|".join(parts[:i]))
+    return sorted(nodes)
+
+
+def roots(ctx) -> List[str]:
+    """Top-level nodes (no parent) that contain the meshes."""
+    return sorted({"|" + mesh.split("|")[1] for mesh in ctx.meshes})
+
+
+def world_bbox(transforms: Iterable[str]) -> om.MBoundingBox:
+    """World-space bounding box of the meshes, ALWAYS in centimetres.
+
+    OpenMaya works in internal units (cm) whatever the scene's display unit
+    is. cmds.exactWorldBoundingBox answers in the display unit, so the same
+    file would give numbers 100x apart in a metre scene.
+    """
+    box = om.MBoundingBox()
+    for transform in transforms:
+        sel = om.MSelectionList()
+        sel.add(mesh_shape(transform))
+        dag = sel.getDagPath(0)
+        local = om.MFnDagNode(dag).boundingBox  # in the shape's own space
+        local.transformUsing(dag.inclusiveMatrix())
+        box.expand(local)
+    return box
+
+
+def transform_fn(node: str) -> om.MFnTransform:
+    sel = om.MSelectionList()
+    sel.add(node)
+    return om.MFnTransform(sel.getDagPath(0))
+
+
+def xyz(point) -> List[float]:
+    """MPoint/MVector -> [x, y, z] floats for JSON metrics."""
+    return [point.x, point.y, point.z]
+
+
 def uv0_set(ctx) -> str:
     """Name of the UV set that becomes UV0 in Unity (the base color UVs), e.g. "map1"."""
     return ctx.asset_class.uv.required_sets[0]

@@ -9,6 +9,11 @@ test expects. Each case is built to break exactly ONE check where possible
 open_borders). EXPECT maps each file to the asset class it is validated as
 and the check(s) it must fail.
 
+After its builder runs, every fixture is conformed (_conform): scaled to
+60 cm, stood on the origin (bottom-centre), transforms frozen, pivots at
+the origin. So topology/budget/UV fixtures don't trip the transform checks.
+Transform fixtures conform themselves first, then break one rule.
+
 Not collected by pytest (name doesn't start with test_). The Maya test
 runner in step 5 imports build_all().
 """
@@ -42,7 +47,20 @@ EXPECT = {
     "SM_UVOutside": ("prop_small", ["uv.unit_square"]),          # shifted to u 1..2
     "SM_UVOutsideTiling": ("env_module", []),                    # same, but tiling is allowed
     "SM_UVOverlap": ("prop_small", ["uv.overlap"]),              # severity info: report still passes
+    "SM_NotFrozen": ("prop_small", ["transform.frozen"]),        # mesh rotated 90 on Y, not frozen
+    "SM_GroupNotFrozen": ("prop_medium", ["transform.frozen"]),  # LOD group scaled 1.2, not frozen
+    "SM_GeoOffset": ("prop_small", ["transform.pivot"]),         # centred on origin, not standing on it
+    "SM_PivotMoved": ("prop_small", ["transform.pivot"]),        # Maya pivot moved to a corner
+    "SM_PickupCentered": ("pickup", []),                         # pickup = center mode: centred is right
+    "SM_PickupOnGround": ("pickup", ["transform.pivot"]),        # standing on origin is wrong for pickups
+    "SM_TooSmall": ("prop_small", ["transform.size"]),           # 0.6 cm: authored in metres
+    "SM_TooBig": ("prop_small", ["transform.size"]),             # 600 cm: authored in millimetres
+    "SM_Meters": ("prop_small", ["scene.units"]),                # scene unit m (warning: still passes)
 }
+
+# Fixtures whose builder handles placement itself (see _conform).
+SELF_PLACED = {"SM_NotFrozen", "SM_GroupNotFrozen", "SM_GeoOffset", "SM_PivotMoved",
+               "SM_PickupCentered", "SM_PickupOnGround", "SM_TooSmall", "SM_TooBig", "SM_Meters"}
 
 
 def _merge(name, parts):
@@ -65,6 +83,26 @@ def _cube(x=0.0, y=0.0, z=0.0, uv_tile=None):
     cmds.move(x, y, z, cube)
     cmds.makeIdentity(cube, apply=True, translate=True)
     return cube
+
+
+def _conform(size=60.0):
+    """Make the scene a well-placed asset: `size` cm, bbox bottom-centre on
+    the origin, transforms frozen, every pivot at the origin, no history."""
+    from maya import cmds
+    roots = [r for r in cmds.ls(assemblies=True, long=True)
+             if cmds.listRelatives(r, allDescendents=True, type="mesh")]
+    box = cmds.exactWorldBoundingBox(roots)
+    largest = max(box[3] - box[0], box[4] - box[1], box[5] - box[2])
+    factor = size / largest
+    cmds.scale(factor, factor, factor, roots, pivot=(0, 0, 0), relative=True)
+    box = cmds.exactWorldBoundingBox(roots)
+    cmds.move(-(box[0] + box[3]) / 2, -box[1], -(box[2] + box[5]) / 2, roots, relative=True)
+    cmds.makeIdentity(roots, apply=True, translate=True, rotate=True, scale=True, normal=0)
+    # Freezing leaves pivots where they were in world space: reset them.
+    for node in roots + (cmds.listRelatives(roots, allDescendents=True, type="transform", fullPath=True) or []):
+        cmds.xform(node, pivots=(0, 0, 0), worldSpace=True)
+    cmds.delete(roots, constructionHistory=True)
+    return roots
 
 
 def build_clean():
@@ -210,6 +248,67 @@ def build_uv_overlap():
     cmds.polyProjection(mesh + ".f[*]", type="Planar", md="z", ch=False)
 
 
+def build_not_frozen():
+    from maya import cmds
+    mesh = _merge("SM_NotFrozen", [_cube()])
+    _conform()
+    cmds.rotate(0, 90, 0, mesh)  # around the origin pivot: bbox unchanged
+
+
+def build_group_not_frozen():
+    from maya import cmds
+    _lod_asset("SM_GroupNotFrozen", {0: 20, 1: 10})
+    _conform()
+    cmds.scale(1.2, 1.2, 1.2, "SM_GroupNotFrozen")  # 72 -> 86 cm, bottom stays on the origin
+
+
+def build_geo_offset():
+    from maya import cmds
+    mesh = _merge("SM_GeoOffset", [_cube()])
+    _conform()
+    cmds.move(0, -30, 0, mesh, relative=True)  # centred on the origin instead of standing on it
+    cmds.makeIdentity(mesh, apply=True, translate=True)
+    cmds.xform(mesh, pivots=(0, 0, 0), worldSpace=True)
+
+
+def build_pivot_moved():
+    from maya import cmds
+    mesh = _merge("SM_PivotMoved", [_cube()])
+    _conform()
+    cmds.xform(mesh, pivots=(30, 0, 30), worldSpace=True)
+
+
+def build_pickup_centered():
+    from maya import cmds
+    mesh = _merge("SM_PickupCentered", [_cube()])
+    _conform()
+    cmds.move(0, -30, 0, mesh, relative=True)
+    cmds.makeIdentity(mesh, apply=True, translate=True)
+    cmds.xform(mesh, pivots=(0, 0, 0), worldSpace=True)
+
+
+def build_pickup_on_ground():
+    _merge("SM_PickupOnGround", [_cube()])
+    _conform()
+
+
+def build_too_small():
+    _merge("SM_TooSmall", [_cube()])
+    _conform(size=0.6)
+
+
+def build_too_big():
+    _merge("SM_TooBig", [_cube()])
+    _conform(size=600.0)
+
+
+def build_meters():
+    from maya import cmds
+    _merge("SM_Meters", [_cube()])
+    _conform()
+    cmds.currentUnit(linear="m")  # stored in the .ma, restored when the file opens
+
+
 BUILDERS = {
     "SM_Clean": build_clean,
     "SM_NonManifoldEdge": build_nonmanifold_edge,
@@ -231,6 +330,15 @@ BUILDERS = {
     "SM_UVOutside": build_uv_outside,
     "SM_UVOutsideTiling": build_uv_outside_tiling,
     "SM_UVOverlap": build_uv_overlap,
+    "SM_NotFrozen": build_not_frozen,
+    "SM_GroupNotFrozen": build_group_not_frozen,
+    "SM_GeoOffset": build_geo_offset,
+    "SM_PivotMoved": build_pivot_moved,
+    "SM_PickupCentered": build_pickup_centered,
+    "SM_PickupOnGround": build_pickup_on_ground,
+    "SM_TooSmall": build_too_small,
+    "SM_TooBig": build_too_big,
+    "SM_Meters": build_meters,
 }
 assert set(BUILDERS) == set(EXPECT), "every fixture needs an expectation"
 
@@ -242,7 +350,10 @@ def build_all(out_dir):
     paths = {}
     for name in sorted(BUILDERS):
         cmds.file(new=True, force=True)
+        cmds.currentUnit(linear="cm")  # a previous fixture may have changed it
         BUILDERS[name]()
+        if name not in SELF_PLACED:
+            _conform()
         path = os.path.abspath(os.path.join(out_dir, name + ".ma"))
         cmds.file(rename=path)
         cmds.file(save=True, type="mayaAscii")

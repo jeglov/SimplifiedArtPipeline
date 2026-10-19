@@ -14,10 +14,14 @@ from validate.maya.checks import (
     budget_materials,
     budget_tris,
     scene_has_meshes,
+    scene_units,
     topology_lamina_faces,
     topology_ngons,
     topology_non_manifold,
     topology_open_borders,
+    transform_frozen,
+    transform_pivot,
+    transform_size,
     uv_overlap,
     uv_present,
     uv_unit_square,
@@ -38,6 +42,11 @@ CHECKS = (
     uv_present,
     uv_unit_square,
     uv_overlap,
+    # transforms & scale
+    scene_units,
+    transform_frozen,
+    transform_pivot,
+    transform_size,
 )
 
 _REQUIRED = ("ID", "SEVERITY", "FIXABLE", "DESCRIPTION", "run")
