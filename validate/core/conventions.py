@@ -113,6 +113,8 @@ class TextureRules:
     min_size: int
     types: Tuple[TextureType, ...]
     mipmaps: bool
+    # Max size for textures outside a class folder (shared atlases, materials).
+    default_max_size: int
 
 
 @dataclass(frozen=True)
@@ -388,6 +390,7 @@ def _parse_textures(data: Dict[str, Any]) -> Tuple[TextureRules, Dict[str, int]]
         min_size=r.get("min_size", int),
         types=tuple(types),
         mipmaps=mipmaps,
+        default_max_size=sizes["default"],
     )
     r.done()
     return rules, sizes

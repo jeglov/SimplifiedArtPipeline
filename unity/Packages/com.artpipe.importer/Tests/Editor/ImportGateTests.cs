@@ -194,6 +194,9 @@ namespace Artpipe.Tests
             return assetFolder;
         }
 
+        /// <summary>Delete this asset path on Dispose.</summary>
+        public void Track(string assetPath) => _files.Add(assetPath);
+
         public string Put(string golden, string folder, bool withReport = true)
         {
             var fbx = $"{folder}/{golden}.fbx";

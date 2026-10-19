@@ -64,6 +64,7 @@ def build(c: conv.Conventions, conventions_dir: Path) -> Dict[str, Any]:
         "square_required": t.square_required,
         "min_size": t.min_size,
         "mipmaps": t.mipmaps,
+        "default_max_size": t.default_max_size,
         "types": {x.suffix: {"description": x.description, "color_space": x.color_space,
                              "alpha": x.alpha, "channels": dict(x.channels),
                              "formats": dict(x.formats)}

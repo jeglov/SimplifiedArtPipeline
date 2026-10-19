@@ -416,6 +416,7 @@
     "unity_import.yaml": "bc9a3f96949e568799518b534582a9c9c31aaf655c276eed3998129caf17f0e3"
   },
   "textures": {
+    "default_max_size": 512,
     "min_size": 32,
     "mipmaps": true,
     "power_of_two": true,

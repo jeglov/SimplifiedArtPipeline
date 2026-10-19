@@ -165,6 +165,8 @@ namespace Artpipe
         public bool SquareRequired { get; set; }
         public int MinSize { get; set; }
         public bool Mipmaps { get; set; }
+        /// <summary>Max size for textures outside a class folder (shared atlases).</summary>
+        public int DefaultMaxSize { get; set; }
         public Dictionary<string, TextureType> Types { get; set; }
     }
 
