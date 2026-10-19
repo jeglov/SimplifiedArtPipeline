@@ -37,6 +37,22 @@ def mesh_fn(transform: str) -> om.MFnMesh:
     return om.MFnMesh(sel.getDagPath(0))
 
 
+def materials(transform: str) -> List[str]:
+    """Sorted material names actually assigned to the mesh (one per shading engine)."""
+    shape = mesh_shape(transform)
+    names = []
+    for sg in set(cmds.listConnections(shape, type="shadingEngine") or []):
+        # A connection alone isn't an assignment: reassigning faces often
+        # leaves a stale link to initialShadingGroup with no faces in it.
+        # Count the engine only if this mesh (or some of its faces) is a member.
+        members = cmds.ls(cmds.sets(sg, query=True) or [], long=True)
+        if not any(m.split(".")[0] in (transform, shape) for m in members):
+            continue
+        shader = cmds.listConnections(sg + ".surfaceShader") or ["<no shader>"]
+        names.append(shader[0])
+    return sorted(names)
+
+
 def short_name(path: str) -> str:
     """"|SM_Crate|SM_Crate_LOD0" -> "SM_Crate_LOD0"."""
     return path.rsplit("|", 1)[-1]

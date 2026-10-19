@@ -75,6 +75,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     from validate.maya import session
     session.start()
     try:
+        from validate.maya import registry  # needs Maya running (checks import maya)
+        unknown = registry.unknown_override_ids(conventions)
+        if unknown:
+            print("artpipe: mesh_budgets.yaml severity_overrides name unknown checks: %s"
+                  % "; ".join(unknown), file=sys.stderr)
+            return EXIT_TOOL_ERROR
+
         args.out.mkdir(parents=True, exist_ok=True)
         worst = 0
         for path in args.files:

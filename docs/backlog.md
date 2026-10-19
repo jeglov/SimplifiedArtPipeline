@@ -15,7 +15,6 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 2 | P1.3 | The Maya path `C:\Program Files\Autodesk\Maya2023\bin\mayapy.exe` is hardcoded in README and commands | Breaks on any other machine or Maya version | Add a wrapper script that reads a `MAYAPY` env var and falls back to auto-detecting the newest Maya |
 | 3 | P1.3 | `source.path` in the report is echoed exactly as given | Absolute paths leak machine layout, and the same asset gives different reports on different machines | Store a repo-relative path when the file is inside the repo. The hash stays the identity |
 | 4 | P1.3 | For **FBX** inputs, the file's own unit and up-axis are lost: Maya converts FBX to the scene's preferences on open, so `scene.units` reports "not verifiable". For `.ma` the unit is stored, but up-axis isn't stored at all (it's a Maya preference) | A Z-up or metre-unit FBX isn't flagged by `scene.units` (`transform.size` still catches a 100x scale error) | Parse the FBX header `GlobalSettings` (`UnitScaleFactor`, `UpAxis`) before opening. Possibly a P3 need too: AI image-to-3D outputs (GLB/FBX) come in metres and often Z-up |
-| 5 | P1.3 | `severity_overrides` check IDs in `mesh_budgets.yaml` are only format-checked | A typo like `topology.ngon` would silently never apply | Once the registry exists, fail at load time on unknown check IDs |
 | 6 | P1.3 | The asset class comes from a CLI argument | An agent or an artist can pass the wrong class | P2/P5: infer it from the folder (`Assets/Art/Props/Small/`) or an asset manifest, and keep the CLI flag as an override |
 | 7 | P1.3 | `OFFENDER_CAP = 50` is global | A fix-planning agent may need the full list | Add a `--max-offenders` CLI flag (0 = unlimited) |
 | 8 | P1.4 | The report has no `fixes` section yet | Agents must see what was changed, not just the final state | Add `fixes[]` (id, applied, changed nodes) and bump `SCHEMA_VERSION` to 1.1 |
@@ -30,7 +29,6 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 17 | P5 | Dependencies are installed with `pip --user` into `%APPDATA%\Python\Python39`, which is shared by every Python 3.9 | Can clash with other tools, and isn't reproducible on a farm | Vendor them into `third_party/` with `pip install --target`, and the wrapper script puts that folder on `PYTHONPATH` |
 | 18 | P5 | Only tested on Maya 2023 (Python 3.9). Maya 2025+ uses Python 3.11 | Studios run newer Maya | Test matrix on 2023 and 2025+ if available. Code stays 3.9-compatible |
 | 19 | P5 | The package is found through pytest `pythonpath = ["."]`, not installed | Fine for a repo tool, odd for reuse | Revisit if artpipe needs to be pip-installable |
-| 20 | P1.3 | Hierarchy rules are documented in the schema but not enforced: at most one root group named like the file, `_LODn` present on all meshes or none, contiguous LOD levels, SM/SK prefix matching the class `mesh_types` | Unity's LODGroup auto-setup silently breaks on mismatched suffixes | Implement in the `naming.convention` check (cross-node rules, beyond regex) |
 | 22 | P2 | Texture rules (POT, max size, alpha, suffix) only exist as data | Phase 1 validates meshes only | Texture validator in P2 (Python + Pillow, or in the Unity TexturePostprocessor) |
 | 23 | P2 | Budgets are educated defaults, not measured on a device | A reviewer may ask "how did you pick 500 tris?" | Profile a test scene on a low-end Android device (Unity Profiler / Frame Debugger) and record the numbers in `docs/conventions.md` |
 | 24 | P1.3 | `budget.materials` counts materials per mesh, but faces with NO material on a partly assigned mesh aren't detected | Those faces import into Unity with no material and render pink | Compare the faces covered by all shading engines with the mesh's face count, and report the uncovered faces as offenders |
@@ -41,5 +39,7 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 
 | # | Stage | Issue | Resolved in |
 |---|---|---|---|
+| 5 | P1.3 | `severity_overrides` check IDs in `mesh_budgets.yaml` are only format-checked | `registry.unknown_override_ids()`: the CLI exits 2 on an unknown check id (step 3.6) |
+| 20 | P1.3 | Hierarchy rules are documented in the schema but not enforced: at most one root group named like the file, `_LODn` present on all meshes or none, contiguous LOD levels, SM/SK prefix matching the class `mesh_types` | Hierarchy rules in the `naming.convention` check (step 3.6) |
 | 21 | P1.3 | No check for `max_materials` | `budget.materials` check (step 3.3) |
 | - | P1.0 | Project was inside a git repo rooted at the user's home folder | `git init` in `ArtPipeline/` (initial commit) |

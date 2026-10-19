@@ -22,6 +22,8 @@ DESCRIPTION = "LOD count is allowed for the class, levels are contiguous and eac
 
 
 def run(ctx) -> CheckResult:
+    if not ctx.meshes:  # empty scene: scene.has_meshes reports it, once
+        return ctx.result(ID, SEVERITY, FIXABLE, passed=True, message="no meshes to check (see scene.has_meshes)")
     rules = ctx.asset_class.lods
     tris, meshes = {}, {}  # level -> total tris / mesh paths
     for mesh in ctx.meshes:

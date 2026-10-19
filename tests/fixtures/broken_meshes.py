@@ -13,6 +13,8 @@ After its builder runs, every fixture is conformed (_conform): scaled to
 60 cm, stood on the origin (bottom-centre), transforms frozen, pivots at
 the origin. So topology/budget/UV fixtures don't trip the transform checks.
 Transform fixtures conform themselves first, then break one rule.
+Finally, faces still on Maya's default lambert1 get a material named
+M_<AssetName>, so fixtures don't trip the material naming rule.
 
 Not collected by pytest (name doesn't start with test_). The Maya test
 runner in step 5 imports build_all().
@@ -56,11 +58,22 @@ EXPECT = {
     "SM_TooSmall": ("prop_small", ["transform.size"]),           # 0.6 cm: authored in metres
     "SM_TooBig": ("prop_small", ["transform.size"]),             # 600 cm: authored in millimetres
     "SM_Meters": ("prop_small", ["scene.units"]),                # scene unit m (warning: still passes)
+    "SM_BadMeshName": ("prop_small", ["naming.convention"]),     # mesh "pCube1"
+    "SM_BadGroupName": ("prop_small", ["naming.convention"]),    # root group "group1"
+    "SM_BadMaterialName": ("prop_small", ["naming.convention"]), # material "lambert2"
+    "SM_MixedLods": ("prop_medium", ["naming.convention"]),      # _LOD0 + a mesh without suffix
+    "SK_WrongPrefix": ("prop_small", ["naming.convention"]),     # SK_ (skinned) prefix on a static prop
+    "SM_ExtraRoot": ("prop_small", ["naming.convention"]),       # stray locator at the root
+    "SM_FileMismatch": ("prop_small", ["naming.convention"]),    # file SM_FileMismatch, mesh SM_Crate
+    "crate_final_v2": ("prop_small", ["naming.convention"]),     # the classic artist file name
+    "SM_WithHistory": ("prop_small", ["scene.history"]),         # live polyTriangulate node
+    "SK_Skinned": ("character", []),                             # skinCluster history is allowed
 }
 
 # Fixtures whose builder handles placement itself (see _conform).
 SELF_PLACED = {"SM_NotFrozen", "SM_GroupNotFrozen", "SM_GeoOffset", "SM_PivotMoved",
-               "SM_PickupCentered", "SM_PickupOnGround", "SM_TooSmall", "SM_TooBig", "SM_Meters"}
+               "SM_PickupCentered", "SM_PickupOnGround", "SM_TooSmall", "SM_TooBig", "SM_Meters",
+               "SM_WithHistory", "SK_Skinned"}
 
 
 def _merge(name, parts):
@@ -309,6 +322,75 @@ def build_meters():
     cmds.currentUnit(linear="m")  # stored in the .ma, restored when the file opens
 
 
+def build_bad_mesh_name():
+    from maya import cmds
+    cmds.polyCube(name="pCube1", ch=False)
+
+
+def build_bad_group_name():
+    from maya import cmds
+    cmds.group(_merge("SM_BadGroupName", [_cube()]), name="group1")
+
+
+def build_bad_material_name():
+    from maya import cmds
+    mesh = _merge("SM_BadMaterialName", [_cube()])
+    cmds.sets(mesh, edit=True, forceElement=_material("lambert2"))
+
+
+def build_mixed_lods():
+    # Group first, rename the child after: if a root mesh were already called
+    # SM_MixedLods, Maya would silently name the new group "SM_MixedLods1".
+    from maya import cmds
+    group = cmds.group([_sphere(20, "SM_MixedLods_LOD0"), _sphere(10, "tmp")], name="SM_MixedLods")
+    cmds.rename(group + "|tmp", "SM_MixedLods")
+
+
+def build_wrong_prefix():
+    _merge("SK_WrongPrefix", [_cube()])
+
+
+def build_extra_root():
+    from maya import cmds
+    _merge("SM_ExtraRoot", [_cube()])
+    cmds.spaceLocator(name="locator1")
+
+
+def build_file_mismatch():
+    _merge("SM_Crate", [_cube()])
+
+
+def build_bad_file_name():
+    _merge("SM_Crate", [_cube()])
+
+
+def build_with_history():
+    from maya import cmds
+    mesh = _merge("SM_WithHistory", [_cube()])
+    _conform()
+    cmds.polyTriangulate(mesh, constructionHistory=True)  # tris count unchanged: 12
+
+
+def build_skinned():
+    from maya import cmds
+    mesh = _merge("SK_Skinned", [_cube()])
+    _conform()
+    cmds.select(clear=True)  # otherwise the joint is parented under the selection
+    root = cmds.joint(name="root_JNT", position=(0, 0, 0))
+    cmds.joint(name="top_JNT", position=(0, 60, 0))
+    cmds.skinCluster(root, mesh, toSelectedBones=False)
+
+
+def _default_material(name):
+    """Give faces still on lambert1 a material that follows the convention:
+    "SM_LodsGood" -> "M_LodsGood", "crate_final_v2" -> "M_FinalV2"."""
+    from maya import cmds
+    members = cmds.sets("initialShadingGroup", query=True) or []
+    if members:
+        base = "".join(p[:1].upper() + p[1:] for p in name.split("_")[1:])
+        cmds.sets(members, edit=True, forceElement=_material("M_" + base))
+
+
 BUILDERS = {
     "SM_Clean": build_clean,
     "SM_NonManifoldEdge": build_nonmanifold_edge,
@@ -339,6 +421,16 @@ BUILDERS = {
     "SM_TooSmall": build_too_small,
     "SM_TooBig": build_too_big,
     "SM_Meters": build_meters,
+    "SM_BadMeshName": build_bad_mesh_name,
+    "SM_BadGroupName": build_bad_group_name,
+    "SM_BadMaterialName": build_bad_material_name,
+    "SM_MixedLods": build_mixed_lods,
+    "SK_WrongPrefix": build_wrong_prefix,
+    "SM_ExtraRoot": build_extra_root,
+    "SM_FileMismatch": build_file_mismatch,
+    "crate_final_v2": build_bad_file_name,
+    "SM_WithHistory": build_with_history,
+    "SK_Skinned": build_skinned,
 }
 assert set(BUILDERS) == set(EXPECT), "every fixture needs an expectation"
 
@@ -354,6 +446,7 @@ def build_all(out_dir):
         BUILDERS[name]()
         if name not in SELF_PLACED:
             _conform()
+        _default_material(name)
         path = os.path.abspath(os.path.join(out_dir, name + ".ma"))
         cmds.file(rename=path)
         cmds.file(save=True, type="mayaAscii")

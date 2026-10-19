@@ -22,6 +22,8 @@ UNIT_GUESSES = ((100.0, "metres"), (0.1, "millimetres"), (2.54, "inches"))
 
 
 def run(ctx) -> CheckResult:
+    if not ctx.meshes:  # empty scene: scene.has_meshes reports it, once
+        return ctx.result(ID, SEVERITY, FIXABLE, passed=True, message="no meshes to check (see scene.has_meshes)")
     lo, hi = ctx.asset_class.size_cm_min, ctx.asset_class.size_cm_max
     box = world_bbox(ctx.meshes)
     dims = [box.width, box.height, box.depth]

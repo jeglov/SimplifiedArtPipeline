@@ -13,7 +13,9 @@ from validate.maya.checks import (
     budget_lods,
     budget_materials,
     budget_tris,
+    naming_convention,
     scene_has_meshes,
+    scene_history,
     scene_units,
     topology_lamina_faces,
     topology_ngons,
@@ -47,6 +49,9 @@ CHECKS = (
     transform_frozen,
     transform_pivot,
     transform_size,
+    # scene hygiene
+    naming_convention,
+    scene_history,
 )
 
 _REQUIRED = ("ID", "SEVERITY", "FIXABLE", "DESCRIPTION", "run")
@@ -65,6 +70,20 @@ def _validate(checks) -> None:
 
 
 _validate(CHECKS)
+
+
+def unknown_override_ids(conventions) -> List[str]:
+    """severity_overrides in mesh_budgets.yaml that name no registered check.
+
+    The conventions loader can only check an id's FORMAT (it never imports
+    Maya), so a typo like "topology.ngon" would load fine and silently never
+    apply. The CLI calls this once per run and refuses to continue.
+    """
+    known = {check.ID for check in CHECKS}
+    return sorted("%s: %s" % (cls.name, check_id)
+                  for cls in conventions.classes
+                  for check_id, _ in cls.severity_overrides
+                  if check_id not in known)
 
 
 def run_all(ctx) -> Tuple[List[CheckResult], List[str]]:
