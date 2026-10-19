@@ -14,7 +14,6 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 1 | P5 | `mayapy` cold start is about 21 s per process | One process per asset means 100 assets ≈ 35 min of pure startup | The CLI accepts many files per run and writes one report per file. In P5, consider a persistent Maya worker behind the MCP server The CLI already validates many files per run; what's left is the persistent worker. |
 | 4 | P3 | For **FBX** inputs, the file's own unit and up-axis are lost: Maya converts FBX to the scene's preferences on open, so `scene.units` reports "not verifiable". For `.ma` the unit is stored, but up-axis isn't stored at all (it's a Maya preference) | A Z-up or metre-unit FBX isn't flagged by `scene.units` (`transform.size` still catches a 100x scale error) | Parse the FBX header `GlobalSettings` (`UnitScaleFactor`, `UpAxis`) before opening. Possibly a P3 need too: AI image-to-3D outputs (GLB/FBX) come in metres and often Z-up |
 | 6 | P5 | The asset class comes from a CLI argument | An agent or an artist can pass the wrong class | P2/P5: infer it from the folder (`Assets/Art/Props/Small/`) or an asset manifest, and keep the CLI flag as an override |
-| 9 | P1.5 | The smoke test was run by hand and isn't in the suite | Nothing guards against a Maya-side import regression | Add Maya integration tests with a session-scoped `maya.standalone` fixture |
 | 10 | P2 | Unity C# can't read YAML without an extra package (YamlDotNet) | The Phase 2 importer needs the same budgets as the validator | Add `python -m validate.core.conventions --dump` → `conventions.lock.json`, read in C# with Newtonsoft. YAML stays the human-authored source of truth |
 | 11 | P2 | Tri count is measured in Maya, but the GPU cost is the **vertex** count after UV-seam and hard-edge splits | A 500-tri mesh with many seams can have 3× the vertices | Measure post-import vertex count in the Unity AssetPostprocessor and add it to the budget |
 | 12 | P2 | Skinned meshes have no checks: bone count, influences per vertex (mobile: 2–4), bind pose | `character` and `crowd_unit` classes exist but skinning isn't validated | Add a `skin.*` check family (Maya side) plus the Unity import setting `skinWeights` |
@@ -37,6 +36,7 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 
 | # | Stage | Issue | Resolved in |
 |---|---|---|---|
+| 9 | P1.5 | The smoke test was run by hand and isn't in the suite | `tests/integration/`: session-scoped Maya, 224 tests incl. every fixture before/after `--fix`, determinism, read-only, FBX round trip (step 5) |
 | 8 | P1.4 | The report has no `fixes` section yet | `fixes[]`, `fixed_from`, `summary.fixes_applied`; `SCHEMA_VERSION` 1.1 (step 4.1) |
 | 2 | P1.3 | The Maya path `C:\Program Files\Autodesk\Maya2023\bin\mayapy.exe` is hardcoded in README and commands | `artpipe.cmd` wrapper: `MAYAPY` env or newest installed Maya (step 3.7) |
 | 3 | P1.3 | `source.path` in the report is echoed exactly as given | `validate.core.paths.report_path`: repo-relative POSIX paths (step 3.7) |

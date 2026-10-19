@@ -17,7 +17,7 @@ Finally, faces still on Maya's default lambert1 get a material named
 M_<AssetName>, so fixtures don't trip the material naming rule.
 
 Not collected by pytest (name doesn't start with test_). The Maya test
-runner in step 5 imports build_all().
+suite (tests/maya/) imports build_all(), EXPECT and FIX_EXPECT.
 """
 from __future__ import annotations
 
@@ -29,12 +29,14 @@ import sys
 # 10x10 = 180, 16x16 = 480, 20x20 = 760.
 EXPECT = {
     "SM_Clean": ("prop_small", []),
+    "SM_Empty": ("prop_small", ["scene.has_meshes"]),           # empty export: ONLY this check fails
     "SM_NonManifoldEdge": ("prop_small", ["topology.non_manifold"]),
     "SM_NonManifoldVertex": ("prop_small", ["topology.non_manifold"]),
     # Stacked faces share every edge (no border) and also stack in UV space (info).
     "SM_Lamina": ("prop_small", ["topology.lamina_faces", "uv.overlap"]),
     "SM_OpenBorder": ("prop_small", ["topology.open_borders"]),
     "SM_Ngon": ("prop_small", ["topology.ngons"]),
+    "SM_Pentagon": ("prop_small", ["topology.ngons"]),           # boundary: 5 sides is the smallest ngon
     "SM_OverBudget": ("prop_small", ["budget.tris"]),            # 760 tris > 500
     "SM_LodsGood": ("prop_medium", []),                          # LOD0 760, LOD1 180 (max 418)
     "SM_LodTooHeavy": ("prop_medium", ["budget.lods"]),          # LOD0 760, LOD1 480 (max 418)
@@ -103,7 +105,7 @@ FIX_EXPECT = {
 SELF_PLACED = {"SM_NotFrozen", "SM_GroupNotFrozen", "SM_GeoOffset", "SM_PivotMoved",
                "SM_PickupCentered", "SM_PickupOnGround", "SM_TooSmall", "SM_TooBig", "SM_Meters",
                "SM_WithHistory", "SK_Skinned", "SK_SkinnedHistory", "SK_SkinnedLamina",
-               "SM_NegativeScale", "SM_Messy"}
+               "SM_NegativeScale", "SM_Messy", "SM_Empty"}
 
 
 def _merge(name, parts):
@@ -146,6 +148,10 @@ def _conform(size=60.0):
         cmds.xform(node, pivots=(0, 0, 0), worldSpace=True)
     cmds.delete(roots, constructionHistory=True)
     return roots
+
+
+def build_empty():
+    pass  # a new, empty scene: what a failed export or generation step leaves
 
 
 def build_clean():
@@ -474,13 +480,24 @@ def _default_material(name):
         cmds.sets(members, edit=True, forceElement=_material("M_" + base))
 
 
+def build_pentagon():
+    # Boundary case: a 5-sided prism. An octagon alone wouldn't catch an
+    # off-by-one threshold (found by mutation testing: "> 5" still passed).
+    from maya import cmds
+    mesh = _merge("SM_Pentagon", [cmds.polyCylinder(subdivisionsAxis=5, subdivisionsCaps=0, ch=False)[0]])
+    cmds.polyEditUV(mesh + ".map[*]", pivotU=0.5, pivotV=0.5, scaleU=0.99, scaleV=0.99)
+    cmds.delete(mesh, constructionHistory=True)
+
+
 BUILDERS = {
     "SM_Clean": build_clean,
+    "SM_Empty": build_empty,
     "SM_NonManifoldEdge": build_nonmanifold_edge,
     "SM_NonManifoldVertex": build_nonmanifold_vertex,
     "SM_Lamina": build_lamina,
     "SM_OpenBorder": build_open_border,
     "SM_Ngon": build_ngon,
+    "SM_Pentagon": build_pentagon,
     "SM_OverBudget": build_over_budget,
     "SM_LodsGood": build_lods_good,
     "SM_LodTooHeavy": build_lod_too_heavy,
