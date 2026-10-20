@@ -1,0 +1,82 @@
+# UA creatives (Phase 4): the formats a banner must meet and the tools that
+# render it.
+#
+# Read by banners/core/rules.py. Python only: banners never pass through
+# Unity, so this file is not in conventions.lock.json.
+#
+# Every network number below is quoted from the network's own spec page,
+# read on the date given. A number with no network source is a house rule
+# and says so.
+version: 1
+
+# The renderer's tools, pinned like the ComfyUI build and the models in
+# generation.yaml: a different encoder or browser changes the output bytes.
+# `artpipe banners setup` installs them and refuses anything else.
+tools:
+  ffmpeg:
+    # gyan.dev "essentials" release build (static, includes libx264), from the
+    # GitHub mirror of gyan.dev. archive_sha256 = GitHub's published digest of
+    # the zip (checked on download); exe hashes = what setup extracted, checked
+    # before every use (cheap: cached by size + mtime).
+    version: "9.0.2"
+    # The exes sit under this folder inside the archive.
+    archive_dir: ffmpeg-9.0.2-essentials_build/bin
+    source: https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip
+    archive_sha256: 60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba
+    # The build links libx264 (GPL), so the binary is GPL-3.0. We only run it;
+    # its outputs (our videos) are not covered by the GPL.
+    licence: GPL-3.0-or-later
+    exe_sha256:
+      ffmpeg: 3256173f3f8bffd7df12227c68adf68025edb1832273a9530688a7bb1ed8edec
+      ffprobe: f0d36ecbbdd3bcfac3efa078c96c7271c2e68b3810595552ac3b7f17e9a65c52
+  chromium:
+    # Chrome for Testing headless shell: the exact build Playwright 1.63.0
+    # drives (its `install --dry-run` names 153.0.8010.12). Downloaded by setup,
+    # not by Playwright: Playwright's downloader timed out on this machine
+    # (probed, docs/banners.md), and our own pin covers the bytes. Chrome for
+    # Testing publishes no hashes, so archive_sha256 is the first download's
+    # (trust on first use, 2026-10-20).
+    version: "153.0.8010.12"
+    archive_dir: chrome-headless-shell-win64
+    source: https://storage.googleapis.com/chrome-for-testing-public/153.0.8010.12/win64/chrome-headless-shell-win64.zip
+    archive_sha256: 7aec872f3090e639c4237467624ea863c20fe2878914c93a6556bdbb52aa6c4c
+    licence: BSD-3-Clause   # plus the third-party notices in LICENSE.headless_shell
+    exe_sha256:
+      chrome-headless-shell: addfa79abb060e1e514e155ed745d4bf96140bca402735958bb4e223aea0b98c
+  playwright:
+    # Drives the browser over CDP. Exact pin in banners/render/package.json;
+    # package-lock.json pins the tree by integrity hash. Installed with
+    # `npm ci --ignore-scripts`: no install scripts, no browser download.
+    version: "1.63.0"
+    licence: Apache-2.0
+
+# Placements: one per output format. Sources read 2026-10-20:
+#   meta    https://www.facebook.com/business/ads-guide/update/video/instagram-reels
+#   tiktok  https://ads.tiktok.com/help/article/tiktok-auction-in-feed-ads
+#   unity   https://docs.unity.com/en-us/grow/acquire/creatives/video/specifications
+#   applovin https://support.applovin.com/en/growth/promoting-your-websites/welcome-to-applovin/ad-specs-and-requirements
+# One file must be accepted by all four, so each rule is the strictest of them.
+placements:
+  ua_video_9x16:
+    description: Portrait UA video for in-feed and rewarded/interstitial ad slots.
+    width: 1080        # all four: 9:16. Meta recommends 1440x2560; 1080x1920 is the
+    height: 1920       # common upload size and above TikTok's 540x960 and AppLovin's 270x480 minimums
+    fps: 30            # house rule; Meta asks for a "fixed frame rate", no network names a number
+    container: mp4     # unity: "H.264-encoded MP4 format"; meta and applovin take MP4 too
+    codec: h264        # meta: "H.264 compression"; unity: H.264
+    pix_fmt: yuv420p   # house rule: the only H.264 chroma format every phone decoder plays
+    audio: false       # agreed for Phase 4: silent (no music licences). Backlog: an audio slot
+    duration_s:
+      min: 6.0         # house rule: no network minimum is published; under 6 s there is no room for an end card
+      max: 60.0        # applovin and unity: 60 s or less (strictest of the four)
+    max_bytes: 104857600    # unity: 100 MB maximum (meta 4 GB, tiktok 500 MB, applovin 1 GB)
+    target_bytes: 10485760  # unity: 10 MB recommended -> a warning above it
+    min_bitrate_kbps: 516   # tiktok: "Bitrate: More than or equal to 516 kbps"
+    # meta: keep "at least 14% of the top, 35% of the bottom, and 6% on each side"
+    # free of text and logos (platform UI covers them). TikTok publishes its
+    # safe zone only as template images; Meta's is the strictest stated in text.
+    safe_zone:
+      top: 0.14
+      bottom: 0.35
+      left: 0.06
+      right: 0.06

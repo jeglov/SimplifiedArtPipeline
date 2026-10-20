@@ -16,7 +16,8 @@ rem   artpipe gen concept "SUBJECT" --class C --style S [--seed N] [--repair]   
 rem   artpipe gen model CONCEPT_RUN --class C [--seed N] [--repair]   image to low-poly GLB + model checks
 rem   artpipe gen ingest MODEL_RUN --class C --name N   GLB to a Maya scene + textures
 rem   artpipe texture FILE... [--class C]  texture rules in Python, before Unity (validate\texture_cli.py)
-rem   artpipe py [ARGS]                   raw mayapy, e.g. "artpipe py -m pip list"
+rem   artpipe banners setup^|status        pinned renderer tools for UA creatives (banners\cli.py)
+rem   artpipe py [ARGS]                raw mayapy, e.g. "artpipe py -m pip list"
 rem
 rem mayapy comes from %MAYAPY% if set, otherwise the newest installed
 rem "%ProgramFiles%\Autodesk\Maya20xx". Works from any folder: the repo root
@@ -66,12 +67,13 @@ if /i "%CMD%"=="conventions" "%MAYAPY%" -m validate.core.lock %ARGS% & goto done
 if /i "%CMD%"=="unity" "%MAYAPY%" -m pipeline.unity %ARGS% & goto done
 if /i "%CMD%"=="gen" "%MAYAPY%" -m gen.cli %ARGS% & goto done
 if /i "%CMD%"=="texture" "%MAYAPY%" -m validate.texture_cli %ARGS% & goto done
+if /i "%CMD%"=="banners" "%MAYAPY%" -m banners.cli %ARGS% & goto done
 if /i "%CMD%"=="test" "%MAYAPY%" -m pytest -q "%ROOT%\tests" %ARGS% & goto done
 if /i "%CMD%"=="py" "%MAYAPY%" %ARGS% & goto done
 echo artpipe: unknown command "%CMD%" 1>&2
 
 :usage
-echo usage: artpipe build^|generate^|gen^|texture^|validate^|fixtures^|unity-fixtures^|test^|docs^|conventions^|unity^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
+echo usage: artpipe build^|generate^|gen^|texture^|banners^|validate^|fixtures^|unity-fixtures^|test^|docs^|conventions^|unity^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
 exit /b 2
 
 :done

@@ -40,3 +40,6 @@ unity/.utmp/
 *.user
 *.apk
 *.aab
+
+# Banner renderer: npm ci recreates it from banners/render/package-lock.json
+banners/render/node_modules/

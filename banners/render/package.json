@@ -1,0 +1,11 @@
+{
+  "name": "artpipe-banner-render",
+  "private": true,
+  "description": "Headless Chromium frame renderer for artpipe banners (banners/render.py drives it).",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}
