@@ -70,7 +70,7 @@ Android Build Support. The code stays Python 3.9-compatible.
 .\artpipe.cmd unity setup                                           # once: URP, Linear, text assets
 .\artpipe.cmd fixtures                                              # build 45 test scenes into out\fixtures
 .\artpipe.cmd build out\fixtures\SM_Messy.ma --class prop_small     # Maya -> Unity prefab
-.\artpipe.cmd test                                                  # ~450 tests, ~4 min (close the Unity Editor first)
+.\artpipe.cmd test                                                  # ~480 tests, ~4.5 min (close the Unity Editor first)
 .\artpipe.cmd test -m "not maya and not unity"                      # pure Python only, ~2 s, any Python
 ```
 
