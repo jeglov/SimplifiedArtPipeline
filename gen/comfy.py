@@ -115,6 +115,14 @@ def gpu_driver() -> Optional[str]:
 
 # --- HTTP -------------------------------------------------------------------------
 
+class ServerLost(ToolError):
+    """Nothing answers on the port: the server crashed or was stopped mid-run."""
+
+
+class RunTimeout(ToolError):
+    """The run did not finish within comfyui.run_timeout_s (it was interrupted)."""
+
+
 class Client:
     def __init__(self, port: int) -> None:
         self.base = "http://127.0.0.1:%d" % port
@@ -125,6 +133,10 @@ class Client:
                 return r.status, r.read()
         except urllib.error.HTTPError as e:
             return e.code, e.read()
+        except (urllib.error.URLError, ConnectionError, OSError) as e:
+            # Probed: ComfyUI can die mid-run (a Windows access violation in the
+            # text encoder); the next poll gets "connection refused".
+            raise ServerLost("ComfyUI at %s stopped answering (%s)" % (self.base, getattr(e, "reason", e)))
 
     def get(self, path: str, query: Optional[Mapping[str, str]] = None) -> Tuple[int, bytes]:
         url = self.base + path + ("?" + urllib.parse.urlencode(query) if query else "")
@@ -192,6 +204,18 @@ def _log_tail(log: Path, lines: int = 15) -> str:
         text = log.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return ""
+    return "\n".join(text[-lines:])
+
+
+def crash_summary(log: Path, lines: int = 4) -> str:
+    """The server log's last fatal error or traceback and the lines after it, else its tail."""
+    try:
+        text = log.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    for i in range(len(text) - 1, -1, -1):
+        if "fatal exception" in text[i].lower() or text[i].startswith("Traceback"):
+            return "\n".join(t for t in text[i:i + lines + 2] if t.strip())
     return "\n".join(text[-lines:])
 
 
@@ -297,7 +321,7 @@ def wait(client: Client, prompt_id: str, timeout_s: int) -> Dict[str, Any]:
             return history[prompt_id]
         time.sleep(POLL_S)
     client.post_json("/interrupt", {})
-    raise ToolError("the run did not finish within %d s and was interrupted" % timeout_s)
+    raise RunTimeout("the run did not finish within %d s and was interrupted" % timeout_s)
 
 
 def download(client: Client, query: Mapping[str, str]) -> bytes:

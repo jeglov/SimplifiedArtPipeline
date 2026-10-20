@@ -146,10 +146,29 @@ namespace Artpipe
             if (created.Count(SetDeterministicGuid) > 0)
                 AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
+            // Shared materials from textures imported with their model (backlog #49).
+            // The new .mat gets its deterministic GUID before the FBX is reimported
+            // against it: the FBX's remap stores the material's GUID.
+            var textures = accepted.Where(a => a.entry.Kind == "texture").Select(a => a.dest).ToList();
+            var newMaterials = new Dictionary<string, List<string>>();  // model -> materials created for it
+            foreach (var (_, dest, _) in accepted.Where(a => a.entry.Kind == "model"))
+            {
+                var made = SharedMaterials.Create(SharedMaterials.Plan(dest, textures, c));
+                if (made.Count > 0) newMaterials[dest] = made;
+            }
+            if (newMaterials.Count > 0)
+            {
+                foreach (var m in newMaterials.Values.SelectMany(m => m)) SetDeterministicGuid(m);
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+                foreach (var model in newMaterials.Keys.OrderBy(k => k, StringComparer.Ordinal))
+                    AssetDatabase.ImportAsset(model, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+            }
+
             foreach (var (_, dest, entry) in accepted)
             {
                 entry.Imported = true;
                 entry.Results.AddRange(Checks(dest, entry.Kind, c));
+                if (entry.Kind == "model") entry.Materials = SharedMaterialsOf(dest, c);
             }
 
             // A clean model gets its Prefab Variant: the asset game code references.
@@ -182,6 +201,7 @@ namespace Artpipe
                     AssetClass = c.Classes.ContainsKey(folderClass) ? folderClass : null,
                     Results = Checks(file, kind, c),
                 };
+                if (kind == "model") entry.Materials = SharedMaterialsOf(file, c);
                 if (kind == "model" && !entry.Results.Any(r => r.Id.StartsWith("gate.") && r.Blocking))
                 {
                     entry.Results.Add(PrefabCheck(file));
@@ -218,6 +238,11 @@ namespace Artpipe
             gate.AddRange(ModelChecks.Run(go, c.Class(folderClass), assetPath));
             return gate;
         }
+
+        /// <summary>The shared material files this model's FBX materials map to (those that exist).</summary>
+        static List<string> SharedMaterialsOf(string modelPath, ConventionsLock c) =>
+            ModelRules.FbxMaterialNames(modelPath).Select(n => ModelRules.SharedMaterialPath(c.UnityImport, n))
+                .Where(File.Exists).ToList();
 
         /// <summary>The model's Prefab Variant exists, loads, and really derives from this model.</summary>
         public static CheckResult PrefabCheck(string modelPath)

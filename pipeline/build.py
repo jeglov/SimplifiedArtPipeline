@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from pipeline import unity
 
 ROOT = unity.ROOT
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 TOOL = "artpipe.build 1.0"
 MAYA_TIMEOUT_S = 15 * 60
 
@@ -107,6 +107,7 @@ def run_unity(fbx: Path, textures: Sequence[Path], asset_class: str, work: Path)
         "asset": model["path"] if model else None,
         "prefab": model["prefab"] if model else None,
         "textures": sorted(a["path"] for a in data["assets"] if a["kind"] == "texture") if data else [],
+        "materials": list(model.get("materials") or []) if model else [],
     }
 
 
@@ -129,6 +130,7 @@ def build(scene: Path, asset_class: str, textures: Sequence[Path], out: Path) ->
         "stopped_at": v["stopped_at"],
         "stages": stages,
         "exit_code": v["exit_code"],
+        "generation": None,  # filled by `artpipe generate` (pipeline/generate.py)
     }
 
 

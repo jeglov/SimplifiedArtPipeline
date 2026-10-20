@@ -56,6 +56,7 @@ namespace Artpipe
         public string SourcePath;    // import mode: where it came from (repo-relative)
         public string SourceSha256;
         public string Prefab;        // Prefab Variant of a clean model (import mode)
+        public List<string> Materials = new List<string>();  // shared .mat files a model's FBX materials map to
         public List<CheckResult> Results = new List<CheckResult>();
 
         public bool Passed => !Results.Any(r => r.Blocking);
@@ -68,6 +69,7 @@ namespace Artpipe
             ["status"] = Passed ? "pass" : "fail",
             ["imported"] = Imported,
             ["prefab"] = Prefab,
+            ["materials"] = Materials.OrderBy(m => m, System.StringComparer.Ordinal).Cast<object>().ToList(),
             ["source"] = SourcePath == null ? null : new Dictionary<string, object>
             {
                 ["path"] = SourcePath,
@@ -84,7 +86,7 @@ namespace Artpipe
     /// </summary>
     public sealed class ImportReport
     {
-        public const string SchemaVersion = "1.0";
+        public const string SchemaVersion = "1.1";
         public const string Tool = "artpipe.unity 0.2.0";
 
         public string Mode = "verify";

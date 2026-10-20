@@ -152,10 +152,42 @@ def test_success_without_declared_outputs_is_an_error(monkeypatch, tmp_path):
 
 
 def test_server_is_stopped_even_when_the_run_crashes(monkeypatch, tmp_path):
-    fake = FakeServer(crash=ToolError("did not finish")).install(monkeypatch, tmp_path)
-    with pytest.raises(ToolError):
+    fake = FakeServer(crash=RuntimeError("a bug in the harness")).install(monkeypatch, tmp_path)
+    with pytest.raises(RuntimeError):
         run(tmp_path)
     assert fake.stopped == 1
+
+
+def test_a_server_that_dies_mid_run_is_a_recorded_tool_error(monkeypatch, tmp_path):
+    # Probed: ComfyUI died with a Windows access violation in the text encoder;
+    # the next /history poll got "connection refused".
+    fake = FakeServer(crash=comfy.ServerLost("ComfyUI at http://127.0.0.1:8188 stopped answering")).install(
+        monkeypatch, tmp_path)
+    log = tmp_path / "server.log"
+    log.write_text("[INFO] Requested to load ZImageTEModel_\nWindows fatal exception: access violation\n\n"
+                   "Stack (most recent call first):\n  File 'llama.py', line 553 in precompute_freqs_cis\n"
+                   + "  File 'x.py', line 1 in f\n" * 30, encoding="utf-8")
+    monkeypatch.setattr(cli.comfy, "WORK", tmp_path)
+    code, msg = run(tmp_path)
+    m = manifest(tmp_path)
+    assert code == cli.EXIT_TOOL_ERROR and m["status"] == "error" and m["error"]["type"] == "server_lost"
+    assert "access violation" in m["error"]["message"] and "precompute_freqs_cis" in m["error"]["message"]
+    assert m["error"]["message"].count("x.py") <= 3  # the crash, not 30 lines of stack
+    assert fake.stopped == 1
+    assert cli.reusable(next((tmp_path / "runs").iterdir())) is None  # never reused
+
+
+def test_a_run_that_times_out_is_a_recorded_tool_error(monkeypatch, tmp_path):
+    FakeServer(crash=comfy.RunTimeout("the run did not finish within 1800 s")).install(monkeypatch, tmp_path)
+    code, _ = run(tmp_path)
+    assert code == cli.EXIT_TOOL_ERROR and manifest(tmp_path)["error"]["type"] == "timeout"
+
+
+def test_connection_refused_is_server_lost_but_stats_is_just_none():
+    client = comfy.Client(9)  # discard port: nothing listens
+    with pytest.raises(comfy.ServerLost):
+        client.get_json("/history/x")
+    assert client.stats() is None
 
 
 def test_keep_server_and_a_server_we_did_not_start_are_left_running(monkeypatch, tmp_path):

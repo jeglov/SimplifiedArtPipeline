@@ -110,6 +110,15 @@ standard library only** (`urllib`, no websocket package):
   in-memory cache, so it really runs twice). True for the model-free smoke
   graph; for a sampler on a GPU it is exactly what can't be promised.
 
+* **The server can die mid-run.** Seen once in step 3.7, on the first
+  concept of a fresh server: `Windows fatal exception: access violation` in
+  the Qwen3 text encoder (`llama.py precompute_freqs_cis`), right after the
+  encoder was staged for dynamic VRAM loading. The process is gone, the next
+  `/history` poll gets "connection refused". The harness records this as a
+  tool error (`error.type` `server_lost`, with the crash lines from
+  `server.log`) in the run's manifest, exits 2, and the repair loop stops:
+  the same request, rerun, went through (backlog #55).
+
 Still to probe with a real model in step 3.4: out of memory on 8 GB, and
 `SaveGLB`'s output entry (the `"3d"` key is read from ComfyUI's source).
 
@@ -394,3 +403,66 @@ the checks: the heart's seed-56 model has torn faces and holes, seed 1056 is
 a clean closed heart; the coin's retry keeps the star relief; the crate's
 split slats show where the folds are.
 
+## Prompt to prefab: `artpipe generate`
+
+```
+artpipe generate "a golden coin with a star emblem" --class pickup --style casual_toon --name Coin
+# artpipe generate: PASS out/build/SM_Coin/build.report.json -> Assets/Art/pickup/SM_Coin.prefab
+```
+
+One command, four stages, each the tool an agent could call on its own:
+
+1. **concept**: `gen concept --repair` (base seed `--seed`, default 1)
+2. **model**: `gen model --repair` on the accepted concept (`--model-seed`,
+   default 56)
+3. **ingest**: `gen ingest` to `out/gen/assets/<Name>/`
+4. **build**: the ordinary `artpipe build` (Maya validate, fix, export;
+   Unity gate, import, prefab). A generated asset gets no shortcut.
+
+The name and the style are checked before any GPU time is spent. The server
+stays up from concept to model. The report is the build report
+(`out/build/SM_<Name>/build.report.json`, `build_report.schema.json` 1.1)
+with a **`generation`** block: subject, style, per stage the decision, seeds
+tried, blocking checks per attempt, GPU seconds, the repair record and the
+accepted run's manifest (both by sha256), the ingest record, every pinned
+model with its licence, and the generator environment (ComfyUI version and
+commit, torch, GPU, driver). A stop before Maya still writes the report,
+with `stopped_at` concept, model or ingest and `source: null`. Hand-made
+assets have `generation: null`.
+
+**The shared material (backlog #49).** `artpipe unity import` now creates
+`Assets/Art/Materials/M_<Name>.mat` when the FBX has a material `M_<Name>`,
+no such material exists, and `T_<Name>_D` (and `_N`) are imported in the
+same run: URP Lit, base map and normal map set by what the conventions say
+each suffix means (`texture_rules.yaml` channels), `_NORMALMAP` enabled. An
+existing material is never touched (someone may have tuned it), so
+re-imports change nothing. The report lists the shared materials each model
+uses (`materials`). The material gets a deterministic GUID **before** the FBX
+is reimported against it, because the FBX's remap stores the material's GUID.
+
+**Measured end to end** (RTX 3070 Laptop, Unity 6000.5 batchmode):
+
+| Asset | Concept | Model | Maya + Unity | Result |
+|---|---|---|---|---|
+| coin (pickup) | seed 1, reused | seed 56 fails `model.uv_overlap`, seed 1056 passes (both reused) | no fix needed, `unity.materials` passes, `M_Coin.mat` created | **PASS** in 30 s, rerun byte-identical |
+| potion (pickup, new) | seed 1 passes (12 s) | seed 56: 5030 triangles for a 300 budget, 191 interior shells | not reached | **stopped at model** (6 GPU min) |
+| mushroom (pickup, new) | seed 1 passes (12 s) | seed 56: 1 non-manifold edge; seed 1056 passes (586 s for both) | no fix needed, no Unity finding, `M_Mushroom.mat` created | **PASS**, no human step, 10 GPU min |
+
+**Passing is not the same as good.** The mushroom passes every check, and
+the contact sheet still shows a problem: in the accepted seed-1056 bake the
+white spots, the subject's defining feature, have blurred into pink smudges
+(128 px pickup texture, ~50 % UV usage). Seed 56's bake had clean spots.
+Nothing compares the baked texture with the concept today: backlog #56.
+
+The potion is the useful failure. Its concept passed every framing check,
+but `casual_toon` drew it as a **flat 2D vector icon** (outlines, flat
+highlights, no shading), and image-to-3D turned the drawing into 191
+fragments that decimation can't merge. The policy stopped at once
+(`model.triangles` is `stop`: another seed of the same image can't help),
+which is right. What's missing is a check that the concept is a shaded
+object, not an illustration: that is backlog #48 (a vision-model review),
+and escalating to a new concept is #53.
+
+The first potion attempt also found a harness bug: ComfyUI crashed
+mid-run (see "The server can die mid-run" above) and the harness raised a
+Python traceback. It is now a recorded tool error.

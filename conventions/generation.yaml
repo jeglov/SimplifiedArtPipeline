@@ -163,5 +163,9 @@ repair:
     model.manifold: retry
     model.uv: retry
     model.uv_overlap: retry
-    model.triangles: stop  # the decimation target is the budget: over it means a workflow bug
+    # Over budget: decimation can't merge disconnected shells. Seen on a potion
+    # whose concept was a flat 2D drawing: 191 fragments, 5030 triangles for a
+    # 300 budget. Neither a workflow bug nor a seed fixes that: a human (or a
+    # new concept, backlog #53) does.
+    model.triangles: stop
     model.textures: stop   # the workflow didn't bake: a workflow bug, not bad luck

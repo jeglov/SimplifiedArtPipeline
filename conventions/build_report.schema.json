@@ -2,27 +2,28 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/artpipe/artpipe/conventions/build_report.schema.json",
   "title": "artpipe build report",
-  "description": "Written by `artpipe build`: one asset from a Maya scene to a Unity prefab. Links each stage's own report (report.schema.json, unity_report.schema.json) by repo-relative path.",
+  "description": "Written by `artpipe build`: one asset from a Maya scene to a Unity prefab, and by `artpipe generate`: one asset from a text prompt, through the same Maya and Unity stages. Links each stage's own report (report.schema.json, unity_report.schema.json, gen_repair.schema.json, gen_manifest.schema.json) by repo-relative path and sha256.",
 
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "tool", "source", "asset_class", "textures", "status", "stopped_at", "stages", "exit_code"],
+  "required": ["schema_version", "tool", "source", "asset_class", "textures", "status", "stopped_at", "stages", "exit_code", "generation"],
   "properties": {
-    "schema_version": { "const": "1.0" },
+    "schema_version": { "const": "1.1" },
     "tool": { "type": "string", "minLength": 1 },
-    "source": { "$ref": "#/$defs/file" },
+    "source": { "description": "The Maya scene; null only when `artpipe generate` stopped before there was one", "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/file" }] },
     "asset_class": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
     "textures": { "type": "array", "items": { "$ref": "#/$defs/file" } },
     "status": { "enum": ["pass", "fail", "error"] },
-    "stopped_at": { "enum": [null, "maya", "unity", "not_run"] },
+    "stopped_at": { "enum": [null, "concept", "model", "ingest", "maya", "unity", "not_run"] },
     "exit_code": { "enum": [0, 1, 2] },
+    "generation": { "$ref": "#/$defs/generation" },
     "stages": {
       "type": "object",
       "additionalProperties": false,
       "required": ["maya", "unity"],
       "properties": {
         "maya": {
-          "type": "object",
+          "type": ["object", "null"],
           "additionalProperties": false,
           "required": ["exit_code", "status", "report", "fixes_applied", "fbx", "fbx_sha256", "fbx_report"],
           "properties": {
@@ -41,14 +42,15 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": ["exit_code", "status", "report", "asset", "prefab", "textures"],
+              "required": ["exit_code", "status", "report", "asset", "prefab", "textures", "materials"],
               "properties": {
                 "exit_code": { "enum": [0, 1, 2] },
                 "status": { "enum": ["pass", "fail", "error"] },
                 "report": { "type": ["string", "null"] },
                 "asset": { "type": ["string", "null"] },
                 "prefab": { "type": ["string", "null"] },
-                "textures": { "type": "array", "items": { "type": "string" } }
+                "textures": { "type": "array", "items": { "type": "string" } },
+                "materials": { "type": "array", "items": { "type": "string" }, "description": "Shared materials the model uses (created from its textures when missing, backlog #49)" }
               }
             }
           ]
@@ -59,6 +61,85 @@
 
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "nullable_file": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/file" }] },
+    "generation": {
+      "description": "Provenance of a generated asset (`artpipe generate`); null for a hand-made one. The model is the only nondeterministic step: what ran it is recorded here, everything after it is deterministic.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["subject", "style", "name", "stages", "models", "environment", "gpu_seconds"],
+          "properties": {
+            "subject": { "type": "string", "minLength": 1 },
+            "style": { "type": "string", "minLength": 1 },
+            "name": { "type": "string", "minLength": 1 },
+            "stages": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["concept", "model", "ingest"],
+              "properties": {
+                "concept": { "$ref": "#/$defs/repaired_stage" },
+                "model": { "$ref": "#/$defs/repaired_stage" },
+                "ingest": {
+                  "oneOf": [
+                    { "type": "null" },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["exit_code", "message", "record"],
+                      "properties": {
+                        "exit_code": { "enum": [0, 2] },
+                        "message": { "type": "string" },
+                        "record": { "$ref": "#/$defs/nullable_file" }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "models": {
+              "type": "array",
+              "description": "Every pinned model behind the accepted runs, with its licence",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "sha256", "licence"],
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "sha256": { "$ref": "#/$defs/sha256" },
+                  "licence": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            "environment": { "type": ["object", "null"], "description": "ComfyUI version and commit, Python, torch, GPU, VRAM and driver of the last accepted run" },
+            "gpu_seconds": { "type": "number", "minimum": 0 }
+          }
+        }
+      ]
+    },
+    "repaired_stage": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["decision", "reason", "exit_code", "attempts", "seeds", "failed", "gpu_seconds", "repair", "run", "manifest"],
+          "properties": {
+            "decision": { "enum": ["accept", "stop"] },
+            "reason": { "type": "string" },
+            "exit_code": { "enum": [0, 1, 2] },
+            "attempts": { "type": "integer", "minimum": 1 },
+            "seeds": { "type": "array", "items": { "type": "integer" } },
+            "failed": { "type": "array", "items": { "type": "array", "items": { "type": "string" } }, "description": "Blocking checks that failed, per attempt" },
+            "gpu_seconds": { "type": "number", "minimum": 0 },
+            "repair": { "$ref": "#/$defs/file" },
+            "run": { "type": ["string", "null"], "description": "The accepted run folder" },
+            "manifest": { "$ref": "#/$defs/nullable_file" }
+          }
+        }
+      ]
+    },
     "file": {
       "type": "object",
       "additionalProperties": false,

@@ -188,21 +188,25 @@ def generate(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep
             shutil.rmtree(str(run_dir))  # a failed or tampered earlier attempt
         run_dir.mkdir(parents=True)
         prompt_graph = wfl.with_prefixes(wf, graph, rid)
-        prompt_id, refused = comfy.queue(client, prompt_graph, "artpipe-" + uuid.uuid4().hex)
-        execution, outputs, error = None, [], None
-        if refused is not None:
-            error = {"type": "prompt_refused", "message": hist.prompt_error(*refused),
-                     "node": None, "node_type": None, "exception_type": None}
-        else:
-            execution = hist.parse_history(comfy.wait(client, prompt_id, rules.comfyui.run_timeout_s),
-                                           prompt_graph)
-            error = execution.error
-            if execution.ok:
-                outputs = _collect(client, execution, wf, run_dir)
-                if not outputs:
-                    error = {"type": "no_outputs", "node": None, "node_type": None,
-                             "exception_type": None,
-                             "message": "the run succeeded but produced no declared output file"}
+        prompt_id, execution, outputs, error = None, None, [], None
+        try:
+            prompt_id, refused = comfy.queue(client, prompt_graph, "artpipe-" + uuid.uuid4().hex)
+            if refused is not None:
+                error = _error("prompt_refused", hist.prompt_error(*refused))
+            else:
+                execution = hist.parse_history(comfy.wait(client, prompt_id, rules.comfyui.run_timeout_s),
+                                               prompt_graph)
+                error = execution.error
+                if execution.ok:
+                    outputs = _collect(client, execution, wf, run_dir)
+                    if not outputs:
+                        error = _error("no_outputs", "the run succeeded but produced no declared output file")
+        except comfy.ServerLost as exc:
+            crash = comfy.crash_summary(comfy.WORK / "server.log")
+            error = _error("server_lost", "%s: it crashed or was stopped during the run%s"
+                           % (exc, (". Server log:\n" + crash) if crash else ""))
+        except comfy.RunTimeout as exc:
+            error = _error("timeout", str(exc))
         manifest = mf.build(wf=wf, workflow_path=report_path(wf.path), params=values, rid=rid,
                             prompt_id=prompt_id, models=models, env=env_record,
                             execution=execution, outputs=outputs, error=error, inputs=inputs)
@@ -216,6 +220,10 @@ def generate(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep
         return EXIT_TOOL_ERROR, "%s%s: %s. See %s" % (error["type"], where, error["message"],
                                                       report_path(path)), run_dir
     return EXIT_OK, "OK %s" % report_path(path), run_dir
+
+
+def _error(kind: str, message: str) -> Dict[str, Any]:
+    return {"type": kind, "message": message, "node": None, "node_type": None, "exception_type": None}
 
 
 def _collect(client: comfy.Client, ex: hist.Execution, wf: wfl.Workflow, run_dir: Path) -> List[Dict[str, Any]]:

@@ -2,6 +2,7 @@
 rem artpipe: run pipeline commands under Maya's Python (mayapy).
 rem
 rem   artpipe build SCENE --class C [--texture T ...]   Maya validate/fix/export, then Unity import
+rem   artpipe generate "SUBJECT" --class C --style S --name N   prompt to prefab: concept, image-to-3D, ingest, build
 rem   artpipe validate FILE [FILE ...] --class prop_small [--out out] [--max-offenders N]
 rem   artpipe fixtures [OUT_DIR]          build the test scenes (default out\fixtures)
 rem   artpipe unity-fixtures              rebuild the golden FBX + reports for the Unity tests
@@ -11,7 +12,9 @@ rem   artpipe conventions --dump^|--check  write / verify conventions\convention
 rem   artpipe unity setup^|import^|test     run the Unity project headless (pipeline\unity.py)
 rem   artpipe gen run WORKFLOW [--param K V]  generate on the pinned ComfyUI, with a provenance manifest
 rem   artpipe gen server start^|stop^|status   the pipeline's headless ComfyUI (gen\cli.py)
-rem   artpipe gen concept "SUBJECT" --class C --style S [--seed N]   concept image + image-to-3D checks
+rem   artpipe gen concept "SUBJECT" --class C --style S [--seed N] [--repair]   concept image + image-to-3D checks
+rem   artpipe gen model CONCEPT_RUN --class C [--seed N] [--repair]   image to low-poly GLB + model checks
+rem   artpipe gen ingest MODEL_RUN --class C --name N   GLB to a Maya scene + textures
 rem   artpipe texture FILE... [--class C]  texture rules in Python, before Unity (validate\texture_cli.py)
 rem   artpipe py [ARGS]                   raw mayapy, e.g. "artpipe py -m pip list"
 rem
@@ -54,6 +57,7 @@ goto collect
 
 :dispatch
 if /i "%CMD%"=="build" "%MAYAPY%" -m pipeline.build %ARGS% & goto done
+if /i "%CMD%"=="generate" "%MAYAPY%" -m pipeline.generate %ARGS% & goto done
 if /i "%CMD%"=="validate" "%MAYAPY%" -m validate.maya.cli %ARGS% & goto done
 if /i "%CMD%"=="fixtures" "%MAYAPY%" "%ROOT%\tests\fixtures\broken_meshes.py" %ARGS% & goto done
 if /i "%CMD%"=="unity-fixtures" "%MAYAPY%" "%ROOT%\tests\fixtures\unity_fixtures.py" %ARGS% & goto done
@@ -67,7 +71,7 @@ if /i "%CMD%"=="py" "%MAYAPY%" %ARGS% & goto done
 echo artpipe: unknown command "%CMD%" 1>&2
 
 :usage
-echo usage: artpipe build^|gen^|texture^|validate^|fixtures^|unity-fixtures^|test^|docs^|conventions^|unity^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
+echo usage: artpipe build^|generate^|gen^|texture^|validate^|fixtures^|unity-fixtures^|test^|docs^|conventions^|unity^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
 exit /b 2
 
 :done

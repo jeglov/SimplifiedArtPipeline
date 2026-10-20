@@ -79,7 +79,8 @@ runner uses the exact version pinned in `unity/ProjectSettings` (or `%UNITY%`).
 
 | Command | Does |
 |---|---|
-| `artpipe build SCENE --class C [--texture T ...]` | the whole chain: Maya validate/fix/export, then Unity import; one build report |
+| `artpipe generate "SUBJECT" --class C --style S --name N` | prompt to prefab: concept image, image-to-3D (both with the repair loop), ingest, then `artpipe build`; the build report carries the generation provenance (attempts, seeds, manifests, model licences, GPU) |
+| `artpipe build SCENE --class C [--texture T ...]` | the whole chain: Maya validate/fix/export, then Unity import (creates the shared `M_<Name>.mat` from `T_<Name>_D/N` when missing); one build report |
 | `artpipe validate FILE... --class C [--fix] [--export DIR]` | Maya stage only: validate (and fix) `.ma` / `.mb` / `.fbx`; `--export` writes each passing asset as canonical FBX plus its linked report |
 | `artpipe unity import --class C FILE...` | Unity stage only: gate each FBX before it enters `Assets/Art/C/`, import with the class rules, measure, create the Prefab Variant |
 | `artpipe unity verify` | re-check every asset under `Assets/Art` from the files, with no import cache |
@@ -141,6 +142,6 @@ Known gaps and deferred work are tracked in [docs/backlog.md](docs/backlog.md).
 
 1. **Conventions + Maya validators**: done
 2. **Unity import pipeline**: done (gate, import rules, GPU budgets, textures, batchmode, end to end)
-3. **AI generation stage**: in progress. Text to concept image to TRELLIS.2 mesh to Maya to Unity works end to end (step by step), with a bounded repair loop (`--repair`); next: `artpipe generate`
+3. **AI generation stage**: in progress. Text to concept image to TRELLIS.2 mesh to Maya to Unity works end to end in one command (`artpipe generate`), with a bounded repair loop and the provenance in the build report
 4. Animated store banners at scale: one template → many games
 5. MCP agent layer + docs + demo video

@@ -9,7 +9,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "tool", "mode", "status", "tool_error", "preflight", "assets", "summary"],
   "properties": {
-    "schema_version": { "const": "1.0" },
+    "schema_version": { "const": "1.1" },
     "tool": { "type": "string", "minLength": 1 },
     "mode": { "enum": ["import", "verify"] },
     "status": { "enum": ["pass", "fail", "error"] },
@@ -36,7 +36,7 @@
     "asset": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "kind", "asset_class", "status", "imported", "prefab", "source", "results"],
+      "required": ["path", "kind", "asset_class", "status", "imported", "prefab", "materials", "source", "results"],
       "properties": {
         "path": { "type": "string", "pattern": "^Assets/" },
         "kind": { "enum": ["model", "texture"] },
@@ -44,6 +44,7 @@
         "status": { "enum": ["pass", "fail"] },
         "imported": { "type": "boolean", "description": "false when the gate refused the file before it entered the project" },
         "prefab": { "type": ["string", "null"], "pattern": "^Assets/.*[.]prefab$", "description": "the Prefab Variant created for a clean model (import mode), else null" },
+        "materials": { "type": "array", "items": { "type": "string", "pattern": "^Assets/.*[.]mat$" }, "description": "the shared materials (unity_import materials folder) this model's FBX materials are remapped to; [] for textures. `artpipe unity import` creates a missing one as URP Lit from the model's T_<Name>_<type> textures imported with it (backlog #49), and never touches an existing one" },
         "source": {
           "oneOf": [
             { "type": "null" },
