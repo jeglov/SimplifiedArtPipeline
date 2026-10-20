@@ -16,7 +16,7 @@ from banners.core import page as pm
 from banners.core import rules as br
 from banners.core import template as tm
 from banners.core import timeline as tl
-from banners.core.checks.banner_context import BannerContext, contrast
+from banners.core.checks.banner_context import BannerContext, contrast, hex_rgb
 from validate.core.image import encode_png
 
 RULES = br.load()
@@ -64,9 +64,13 @@ FACTS = {"format": "mov,mp4,m4a,3gp,3g2,mj2", "codec": "h264", "profile": "High"
 
 def png(path, colour=DARK, w=108, h=192, noise=False):
     data = bytearray()
+    stripes = colour == "stripes"
     for y in range(h):
         for x in range(w):
-            c = colour if not noise else ((x * 7) % 256, (y * 5) % 256, ((x + y) * 3) % 256)
+            if stripes:   # every 5th column bright: 20 % of a 4-px sample grid
+                c = (250, 245, 230) if x % 5 == 0 else DARK
+            else:
+                c = colour if not noise else ((x * 7) % 256, (y * 5) % 256, ((x + y) * 3) % 256)
             data += bytes(c)
     path.write_bytes(encode_png(w, h, 3, bytes(data)))
     return path
@@ -79,7 +83,7 @@ def make(tmp_path):
         layout = layout or synthetic_layout(template)
         keys = pm.key_frames(template, P.fps, len(layout["frames"]))
         bgs = {n: png(tmp_path / ("bg%d.png" % n), bg) for n in keys}
-        dec = {0: png(tmp_path / "d0.png", noise=first_noise, colour=bg)}
+        dec = {0: png(tmp_path / "d0.png", noise=first_noise, colour=DARK if bg == "stripes" else bg)}
         ctx = BannerContext(template, P, RULES, layout, facts or dict(FACTS), dec, bgs)
         res, errors = checks.run_all(checks.BANNER_CHECKS, ctx)
         assert errors == []
@@ -255,3 +259,24 @@ def test_cta_contrast_label_and_scene(make):
     assert not r.passed and "label on fill 1.00:1" in r.offenders[0]
     r = make(bg=(255, 205, 70))["banner.cta_contrast"]               # a golden scene behind a gold button
     assert not r.passed and "button on the scene" in r.offenders[-1] and r.fixable
+
+
+def test_contrast_is_judged_on_the_worst_pixels_not_the_median(make, tmp_path):
+    # A dark background with every 5th column bright: the median sample is dark (passes),
+    # the worst 10 % are bright (fails). The check must fail.
+    layout = synthetic_layout()
+    res = make(layout=layout, bg="stripes")
+    r = res["banner.contrast"]
+    assert not r.passed
+    m = r.metrics["layers"]["headline"]
+    assert m["contrast_median"] >= 3.0 > m["contrast_low"]
+
+
+@pytest.mark.parametrize("label, passes", [("#7A5A20", False), ("#6E5019", True)])
+def test_cta_label_contrast_boundary(make, label, passes):
+    # Brown on the gold fill: #7A5A20 is 4.13:1 (under 4.5), #6E5019 is 4.84:1 (over).
+    layout = synthetic_layout()
+    layout["page"]["colours"]["cta_text"] = label
+    ratio = contrast(hex_rgb(label), hex_rgb(COLOURS["cta"]))
+    assert (ratio >= 4.5) is passes
+    assert make(layout=layout)["banner.cta_contrast"].passed is passes

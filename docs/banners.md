@@ -421,3 +421,62 @@ behind the hero, so figure-ground passes, but it is still a bright,
 red-mushroom world, and by eye the shipped seed 11 (a darker prompt) is the
 better background. A seed retry fixes composition; art direction is the
 prompt's job, and stays a human's (or later the agent's, #48).
+
+## Tests, golden banner, mutation pass (step 4.9)
+
+`artpipe test -m "not maya and not unity and not comfy and not render"`
+runs the banner logic in ~20 s: rules, template and kit readers, the page
+builder, keyframes, the encoder arguments, ffprobe parsing, every kit and
+banner check on synthetic inputs (with boundaries), the cut-out, the
+background measures, the repair planning and the palette pickers, the batch
+hash and summary. The `render` marker adds the real pinned Chromium and
+ffmpeg (~5 min): determinism of frames and encodes, the font record, the
+refused request, a 1 s real banner through all 17 checks, the repair loop
+(shrink, recolour, hand over), the batch (three kits, reuse, invalidation,
+a broken kit), the logo re-render, the golden banner.
+
+**Golden banner** (`tests/test_banner_golden.py`, re-record with
+`artpipe py tests/fixtures/banners/golden_record.py`): the shipped kit in the
+1 s template against its snapshot, at three levels, strictest last:
+
+1. the layout engine's text measure and the fonts it used, exactly;
+2. a 12x21 colour grid of every decoded key frame, within 6 levels per
+   channel: what should survive another machine (#61);
+3. the MP4's sha256: byte-identical on this machine.
+
+Proven: a 9 % background zoom in the template fails levels 2 and 3 and
+leaves level 1 green (no text changed), as it should.
+
+**Mutation pass** (`artpipe py tests/mutation_banners.py`, ~3 min, exit 1
+if a mutant survives): 27 bugs planted one at a time in the banner and kit
+checks, the repair planning, the cut-out, the page, the batch hash, the tool
+verification and the encoder arguments. 25 failed the suite at once. The
+2 survivors were missing tests:
+
+* **contrast judged on the median instead of the worst 10 %**: every
+  contrast test used a uniform background, where the two are equal. Added: a
+  dark background with every fifth column bright behind the text (median
+  passes, worst 10 % fails).
+* **the CTA label bar lowered to 1.5:1**: the only label test was 1.00:1.
+  Added: a label at 4.13:1 (fails) and one at 4.84:1 (passes).
+
+All 27 fail the suite now.
+
+## What the checks can't see yet
+
+A banner that passes all 23 checks reaches the batch's "passed" list. Where
+that is still not enough, each seen on this phase's renders:
+
+| Gap | Seen on | Backlog |
+|---|---|---|
+| Whether the art direction fits the game (bright vs. moody, the right world) | background seed 2007 passed `kit.background` but is still a bright red-mushroom world; seed 11's darker prompt is better | #48 (vision-model review), #64 |
+| Clutter behind text (detail, red/green edges of equal luminance) | both real backgrounds measure the same clutter; no threshold yet | #64 |
+| Where a line breaks for meaning | "Merge mushrooms, grow / a magic grove!" until balanced lines; balance evens lengths, it doesn't read | #63 |
+| TikTok's and Unity's own overlays (published as images only) | Meta's margins used for all | #59 |
+| Glyph coverage before rendering | a Cyrillic string in Fredoka is only caught after 240 frames | #62 |
+| Same file on another machine | byte-identical here; the golden grid tolerance is the plan, not yet measured | #61 |
+
+So, as in Phase 3, the pipeline is built for cheap human review rather
+than none: every banner ships with its contact sheet, every batch with a
+sheet of every game, and a handed-over banner says in plain words who should
+fix it (copy, art, or the template).

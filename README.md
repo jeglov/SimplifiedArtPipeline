@@ -5,11 +5,14 @@ headless and returns machine-readable JSON, so an AI agent can do the whole
 loop with no human in it: generate an asset, validate it, fix what is safe
 to fix, and import it into Unity.
 
-> **Status: Phases 1 and 2 complete.** A headless Maya validator with safe
+> **Status: Phases 1 to 4 complete.** A headless Maya validator with safe
 > auto-fixes, deterministic FBX export, and a Unity 6 import pipeline with an
-> import gate, per-class import rules, GPU budgets and a batchmode CLI. One
-> command takes a messy Maya scene to a clean Unity prefab. Next: the AI
-> generation stage (Phase 3). See the [roadmap](#roadmap).
+> import gate, per-class import rules, GPU budgets and a batchmode CLI (one
+> command takes a messy Maya scene to a clean Unity prefab). An AI generation
+> stage that goes from a prompt to a prefab with provenance (Phase 3). And UA
+> video creatives at scale: one template, a kit per game, rendered, checked
+> against four ad networks' specs and repaired (Phase 4). Next: the MCP agent
+> layer. See the [roadmap](#roadmap).
 
 ## What it does today
 
@@ -37,6 +40,39 @@ In about 20 seconds:
 4. One **build report** links every stage by path and sha256. Every command
    returns `0` pass / `1` asset failed / `2` tool error.
 
+### UA creatives (Phase 4)
+
+```powershell
+.\artpipe.cmd banners setup                                          # once: pinned ffmpeg + Chromium + Playwright
+.\artpipe.cmd banners batch --template hero_endcard --games spotcap_grove
+# artpipe banners: 1 banner(s): 1 passed, 0 handed over, 0 errors, 0 skipped, 0 reused, 1 repaired, 322 s.
+```
+
+![Spotcap Grove, hero_endcard, 9:16: frames at 0, 1, 3, 5, 6 and 8 s](docs/images/spotcap_grove_hero_endcard_sheet.png)
+
+*Spotcap Grove is a made-up game. The hero is a Phase 3 concept cut out with its
+mask, the background one Z-Image image, the logo a wordmark set in an OFL font.*
+
+1. One **template** (layers, keyframes, slots) and one **kit** per game
+   (palette, fonts, art, strings), each kit asset with a licence record and
+   a provenance sidecar. Kit checks run first.
+2. **Headless Chromium, time stepped frame by frame** (no screen recording),
+   then a pinned **x264** encode: byte-identical re-renders on this machine.
+3. **17 banner checks** against the strictest of Meta, TikTok, Unity Ads and
+   AppLovin (size, codec, constant frame rate, 6-60 s, 100 MB, the 516 kbps
+   floor, safe zone) and house rules (text fit, font fallback, readable
+   sizes, WCAG contrast on the real pixels behind the text, first frame,
+   end card, logo).
+4. **Repair**: shrink text (found with 3 s layout passes, not renders),
+   recolour from the palette, or hand over with the reason. Here the headline
+   wrapped to 3 lines; it was shrunk to x0.792 and passed on the second render.
+5. **Batch**: every game x placement x locale, reused when nothing changed
+   (an input hash over the files, the rules, the tools and the code: 322 s
+   rendered, 2 s reused), a summary, a contact sheet, and a warning when two
+   games look alike.
+
+Details and every probed behaviour: [docs/banners.md](docs/banners.md).
+
 ## The rules
 
 All rules live in [`conventions/`](conventions/), not in code. C# reads them
@@ -50,7 +86,9 @@ budget number.
 | [`texture_rules.yaml`](conventions/texture_rules.yaml) | map types (`_D _N _MS _AO _E`): color space, alpha rules, ASTC block per platform, max size per class |
 | [`fbx_export.yaml`](conventions/fbx_export.yaml) | every FBX exporter setting, versioned |
 | [`unity_import.yaml`](conventions/unity_import.yaml) | managed folder, shared materials, LOD switch heights, ModelImporter settings per class |
-| `*.schema.json` | the report contracts: Maya, Unity and build reports |
+| [`generation.yaml`](conventions/generation.yaml), [`gen_styles.yaml`](conventions/gen_styles.yaml) | the pinned ComfyUI and models (sha256, licence), concept and model checks, the repair policy, the art styles |
+| [`banners.yaml`](conventions/banners.yaml) | the UA placements (every number cited to a network's spec page), the pinned renderer tools, the encoder, allowed licences, the house rules of the banner checks, the repair policy |
+| `*.schema.json` | the report contracts: Maya, Unity, build, generation and banner reports and records |
 
 * **[docs/conventions.md](docs/conventions.md)** explains every Maya-side
   rule and why it exists.
@@ -63,15 +101,18 @@ Tables in both docs are generated from these files, and tests fail if the docs d
 ## Quick start
 
 Requirements: Windows, Maya 2023+ (`mayapy`, Python 3.9), Unity 6000.5 with
-Android Build Support. The code stays Python 3.9-compatible.
+Android Build Support; for generation, Comfy Desktop (the pipeline runs its
+own pinned server); for banners, Node.js 20+ (`banners setup` fetches the
+rest). The code stays Python 3.9-compatible.
 
 ```powershell
 .\artpipe.cmd py -m pip install --user -r requirements-maya.txt   # once: pyyaml, pytest, jsonschema
 .\artpipe.cmd unity setup                                           # once: URP, Linear, text assets
 .\artpipe.cmd fixtures                                              # build 45 test scenes into out\fixtures
 .\artpipe.cmd build out\fixtures\SM_Messy.ma --class prop_small     # Maya -> Unity prefab
-.\artpipe.cmd test                                                  # ~750 tests, ~5 min (close the Unity Editor first)
-.\artpipe.cmd test -m "not maya and not unity and not comfy"        # pure Python only, ~3 s, any Python
+.\artpipe.cmd banners setup                                          # once: pinned ffmpeg + Chromium for the banners
+.\artpipe.cmd test                                                  # ~990 tests, ~12 min (close the Unity Editor and ComfyUI first)
+.\artpipe.cmd test -m "not maya and not unity and not comfy and not render"   # pure Python only, ~20 s
 ```
 
 `artpipe.cmd` finds `mayapy` (`%MAYAPY%` or the newest Maya). The Unity
@@ -91,10 +132,16 @@ runner uses the exact version pinned in `unity/ProjectSettings` (or `%UNITY%`).
 | `artpipe gen ingest MODEL_RUN --class C --name N` | GLB to a Maya scene (`SM_N.ma` + `T_N_D/N.png`), sized and placed for the class; then `artpipe build` as for any asset |
 | `artpipe texture FILE... [--class C]` | the Unity texture rules in Python, before a texture reaches Unity (same check ids) |
 | `artpipe gen server start\|stop\|status` | the pipeline's own ComfyUI server (keep it up for a batch: startup is ~15 s) |
+| `artpipe banners setup\|status` | install and verify the pinned ffmpeg, Chromium and Playwright |
+| `artpipe banners kit KIT --template T` | the kit checks (slots, files, licences, colours, images, background) |
+| `artpipe banners art hero\|background\|logo KIT ...` | kit art with provenance: the hero cut out of a Phase 3 concept, one Z-Image background (`--repair` retries the seed while the hero would blend in), the logo rendered from `logo.html` |
+| `artpipe banners render KIT --template T [--repair]` | one banner: MP4, layout record, contact sheet, provenance, the 17 checks; `--repair` fixes and re-renders |
+| `artpipe banners check FOLDER` | re-run the banner checks on a rendered banner |
+| `artpipe banners batch --template T --games G1,G2` | every game x placement x locale, reused by input hash; summary + contact sheet in `out/banners/batch/` |
 | `artpipe conventions --dump\|--check` | write / verify `conventions/conventions.lock.json` |
 | `artpipe docs [--check]` | regenerate the tables in the docs |
 | `artpipe fixtures [DIR]` / `artpipe unity-fixtures` | build the broken test scenes / the golden FBX + reports the Unity tests import |
-| `artpipe test [-m "not maya and not unity and not comfy"]` | the suite (Python, Maya, real Unity and ComfyUI runs) |
+| `artpipe test [-m "not maya and not unity and not comfy and not render"]` | the suite (Python, Maya, real Unity, ComfyUI and banner renders) |
 
 ## Layout
 
@@ -103,13 +150,14 @@ conventions/                 the rules and the report contracts (YAML / JSON Sch
 validate/core/               pure Python: rule loader, lock, report types, FBX + .ma canonicalizers
 validate/maya/               headless Maya: CLI, session, checks/, fixes/, FBX export
 gen/                         generation: core/ (pure: rules, workflows, ComfyUI replies, manifest), comfy.py (server + HTTP), cli.py, workflows/
+banners/                     UA creatives: core/ (pure: rules, template, kit, page, timeline, checks/, repair, batch), render/ (Node + Playwright), templates/, kits/, fonts/, the CLI
 pipeline/                    unity.py (batchmode runner, exit-code reconciliation), build.py (end to end)
 unity/                       Unity 6 URP project (Assets/Art is where imported assets go)
 unity/Packages/com.artpipe.importer/
   Editor/                    gate, ModelImporter/TextureImporter rules, GPU checks, batchmode CLI
   Tests/Editor/              EditMode tests + Fixtures~ (golden FBX + reports)
 tests/                       pure-Python tests, integration/ (mayapy), unity_editor/ (real Unity runs), generation/ (real ComfyUI)
-docs/                        conventions.md, unity_import.md, generation.md, backlog.md
+docs/                        conventions.md, unity_import.md, generation.md, banners.md, backlog.md
 ```
 
 ## Design choices
@@ -143,5 +191,5 @@ Known gaps and deferred work are tracked in [docs/backlog.md](docs/backlog.md).
 1. **Conventions + Maya validators**: done
 2. **Unity import pipeline**: done (gate, import rules, GPU budgets, textures, batchmode, end to end)
 3. **AI generation stage**: done. Text to concept image to TRELLIS.2 mesh to Maya to Unity works end to end in one command (`artpipe generate`), with a bounded repair loop and the provenance in the build report
-4. Animated store banners at scale: one template → many games
+4. **UA creatives at scale**: done. One template, a kit per game, a 9:16 video checked against four ad networks and repaired, batched with reuse by input hash
 5. MCP agent layer + docs + demo video
