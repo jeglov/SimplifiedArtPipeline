@@ -74,6 +74,9 @@ def test_unknown_placement_lists_the_options():
     (("tools", "ffmpeg", "version"), "latest", "exact dotted version"),
     (("tools", "ffmpeg", "exe_sha256"), {"ffmpeg": "0" * 64}, "ffprobe: missing"),
     (("tools", "playwright", "version"), "^1.63.0", "exact"),
+    (("encode", "bitrate_kbps"), 515, "every encode would fail"),   # boundary: 1 kbps under TikTok's floor
+    (("encode", "threads"), 0, "> 0"),                              # 0 = one per core: machine-dependent bytes
+    (("encode", "preset"), "placebo2", "preset"),
     (("placements",), {}, "at least one placement"),
     (("placements",), {"UA-9x16": RAW["placements"]["ua_video_9x16"]}, "snake_case"),
 ])

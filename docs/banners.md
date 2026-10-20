@@ -63,3 +63,42 @@ Probed while installing:
   download browsers.
 * ffmpeg 9.0.2 essentials has `libx264`; Playwright's own ffmpeg (in
   `ms-playwright\ffmpeg-1011`) only encodes VP8 and PNG, and is not used.
+
+## Renderer (`banners/render.py`, `banners/render/render.mjs`)
+
+Python computes the state of every layer at every frame
+(`banners/core/timeline.py`: keyframes, easings) and writes the page; the
+page has no CSS animations and no timers. For frame n, `render.mjs` calls
+`window.artpipe.apply(n)` (the page sets the numbers and returns its layout),
+then takes a PNG screenshot. Time never runs, so a slow machine produces the
+same frames as a fast one and no frame is dropped. That's the difference with
+screen recording (Unity Recorder in real time, Playwright's `recordVideo`):
+there a busy machine drops or duplicates frames.
+
+The page is served from `http://banner.invalid/` through a request route:
+every request is answered from the job's file list or refused, and a refused
+request fails the render (exit 2). A template can't load a font or image
+from the network, and a missing file can't silently become a fallback.
+
+Chromium runs with software raster, no LCD subpixel text, no font hinting,
+sRGB output and device scale 1 (`ARGS` in `render.mjs`).
+
+Probed on 2026-10-20 (`tests/test_banner_render.py` keeps each one true):
+
+| Probe | Result |
+|---|---|
+| Same page, 30 frames, two separate browser launches | **byte-identical PNGs** and identical layout JSON |
+| Speed | ~0.35 s per 1080x1920 frame (screenshot + PNG encode): an 8 s, 240-frame banner in ~85 s |
+| `document.fonts.check('48px "NoSuchFont"')` | **true**: the API answers "nothing to load", not "the font exists". Useless as a check |
+| A family that isn't loaded | drawn in Times New Roman, no error, no console message |
+| Fredoka with Cyrillic ("Tap Привет") | 4 glyphs in Fredoka, **6 in Times New Roman**, silently: Fredoka has no Cyrillic |
+| CDP `CSS.getPlatformFontsForNode` | names the fonts that really drew a node and how many glyphs each: the font-fallback check reads this |
+| x264, same PNGs, `-threads 1` twice / `-threads 0` twice | identical within each setting, **different between them**: the thread count changes the bytes, so it is pinned (4) |
+| x264 CRF 20 on a static frame | **150 kbps**: under TikTok's 516 kbps floor |
+| x264 CBR 5 Mbps (`nal-hrd=cbr`) on the same frame | 4.8 Mbps, byte-identical across runs |
+
+So the outputs are byte-identical on this machine. On another machine they
+should be too (same pinned exes, software raster, fixed thread count), but
+that isn't proven yet (backlog #61). The checks never rely on it: they read
+the layout record and **decoded** frames, not file hashes. Reuse of earlier
+outputs is keyed by the inputs' hash, not by the output's.

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional
 
+from banners.core.video import EncodeRules
 from validate.core.conventions import DEFAULT_DIR, ConventionError, _read_yaml, _Reader
 
 FILE = "banners.yaml"
@@ -79,6 +80,7 @@ class BannerRules:
     ffmpeg: ToolPin
     chromium: ToolPin
     playwright: PlaywrightPin
+    encode: EncodeRules
     placements: Dict[str, Placement]
 
     def placement(self, pid: str) -> Placement:
@@ -167,6 +169,16 @@ def _placement(pid: str, r: _Reader) -> Placement:
     return p
 
 
+PRESETS = ("ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow")
+
+
+def _encode(r: _Reader) -> EncodeRules:
+    enc = EncodeRules(_choice(r, "preset", PRESETS), _positive(r, "threads"), _positive(r, "bitrate_kbps"),
+                      _positive(r, "bufsize_kbps"), _positive(r, "keyint_s", float))
+    r.done()
+    return enc
+
+
 def parse(data: dict) -> BannerRules:
     root = _Reader(data, FILE)
     root.get("version", int)
@@ -175,15 +187,19 @@ def parse(data: dict) -> BannerRules:
     chromium = _tool("chromium", tools.sub("chromium"), CHROMIUM_EXES)
     playwright = _playwright(tools.sub("playwright"))
     tools.done()
+    encode = _encode(root.sub("encode"))
     placements = {}
     for pid, raw in sorted(root.get("placements", dict).items()):
         if not _ID.match(str(pid)):
             raise ConventionError("%s.placements.%s: placement id must be snake_case" % (FILE, pid))
         placements[pid] = _placement(pid, _Reader(raw, "%s.placements.%s" % (FILE, pid)))
+        if placements[pid].min_bitrate_kbps > encode.bitrate_kbps:
+            raise ConventionError("%s.placements.%s.min_bitrate_kbps: above encode.bitrate_kbps (%d): every "
+                                  "encode would fail" % (FILE, pid, encode.bitrate_kbps))
     if not placements:
         raise ConventionError("%s: define at least one placement" % FILE)
     root.done()
-    return BannerRules(ffmpeg, chromium, playwright, placements)
+    return BannerRules(ffmpeg, chromium, playwright, encode, placements)
 
 
 def load(conventions_dir: Optional[Path] = None) -> BannerRules:

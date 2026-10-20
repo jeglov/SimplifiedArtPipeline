@@ -50,6 +50,20 @@ tools:
     version: "1.63.0"
     licence: Apache-2.0
 
+# The x264 encode (banners/core/video.py). Both settings that matter were
+# probed (docs/banners.md):
+#   threads   pinned: -threads 0 (one per core) gave other bytes than 1, so
+#             an auto count would make the file depend on the machine.
+#   CBR       a static frame in CRF 20 came out at 150 kbps, under TikTok's
+#             516 kbps floor; constant bitrate keeps the floor for any content.
+# 5 Mbps x 8 s = 5 MB: under Unity's 10 MB recommendation.
+encode:
+  preset: medium
+  threads: 4
+  bitrate_kbps: 5000
+  bufsize_kbps: 10000
+  keyint_s: 2.0
+
 # Placements: one per output format. Sources read 2026-10-20:
 #   meta    https://www.facebook.com/business/ads-guide/update/video/instagram-reels
 #   tiktok  https://ads.tiktok.com/help/article/tiktok-auction-in-feed-ads
