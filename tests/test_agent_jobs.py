@@ -160,3 +160,25 @@ def test_job_records_match_the_schema():
     assert recs
     for r in recs[-20:]:
         jsonschema.validate(r, schema)
+
+
+def test_first_in_line_waits_only_for_earlier_live_jobs_of_the_same_resource(tmp_path):
+    # The live FIFO test above needs real runners; this one is pure, so the mutation pass sees it.
+    def queued(resource, pid=None):
+        rec = jobs.create("selftest", ["py"], resource, jobs=tmp_path)
+        if pid is not None:
+            (tmp_path / rec["id"] / "spawn.json").write_text(json.dumps({"pid": pid}), encoding="utf-8")
+        time.sleep(0.01)                                   # distinct `created` stamps
+        return rec
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])
+    dead.wait()
+    first = queued("gpu", os.getpid())
+    queued("cpu", os.getpid())                             # another resource
+    queued("gpu", dead.pid)                                # a dead runner
+    last = queued("gpu", os.getpid())
+    assert jobs.first_in_line(jobs.read(first["id"], tmp_path), tmp_path)
+    assert not jobs.first_in_line(jobs.read(last["id"], tmp_path), tmp_path)
+    old = jobs.read(first["id"], tmp_path)
+    old["cancel_requested"] = True                         # a cancelled job doesn't hold the line
+    jobs.write(old, tmp_path)
+    assert jobs.first_in_line(jobs.read(last["id"], tmp_path), tmp_path)

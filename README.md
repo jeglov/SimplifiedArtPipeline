@@ -5,14 +5,17 @@ headless and returns machine-readable JSON, so an AI agent can do the whole
 loop with no human in it: generate an asset, validate it, fix what is safe
 to fix, and import it into Unity.
 
-> **Status: Phases 1 to 4 complete.** A headless Maya validator with safe
+> **Status: Phases 1 to 5 complete.** A headless Maya validator with safe
 > auto-fixes, deterministic FBX export, and a Unity 6 import pipeline with an
 > import gate, per-class import rules, GPU budgets and a batchmode CLI (one
 > command takes a messy Maya scene to a clean Unity prefab). An AI generation
 > stage that goes from a prompt to a prefab with provenance (Phase 3). And UA
 > video creatives at scale: one template, a kit per game, rendered, checked
-> against four ad networks' specs and repaired (Phase 4). Next: the MCP agent
-> layer. See the [roadmap](#roadmap).
+> against four ad networks' specs and repaired (Phase 4). And an MCP server
+> that lets an agent run all of it, with jobs, a persistent Maya worker, an
+> approval queue for anything that touches the game, and review tools that
+> show the agent's model what the checks can't judge (Phase 5). One-page
+> overview: [docs/architecture.md](docs/architecture.md).
 
 ## What it does today
 
@@ -73,6 +76,33 @@ mask, the background one Z-Image image, the logo a wordmark set in an OFL font.*
 
 Details and every probed behaviour: [docs/banners.md](docs/banners.md).
 
+### The agent layer (Phase 5)
+
+```powershell
+.\artpipe.cmd agent setup        # once: Python 3.12 venv with the hash-locked MCP SDK
+# open the repo in Claude Code: .mcp.json registers `artpipe agent serve`; /mcp lists 29 tools
+.\artpipe.cmd queue list          # what the agent asked to do, and what it handed over
+.\artpipe.cmd queue approve approval-1a2b3c4d5e --note "ok"
+```
+
+1. **artpipe is an MCP server; the client is the agent.** Each tool runs an
+   artpipe command and returns its exit code, meaning and files. The
+   pipeline never calls an LLM.
+2. **Two levels of tools**: fine (list checks, run one check, apply one fix,
+   in a persistent Maya worker: 0.04-0.12 s instead of a 4.6 s cold start)
+   and coarse (validate, generate stages, banners, `unity verify`).
+3. **Jobs** for long work, with live ComfyUI progress, a GPU queue (first
+   come first served) and a shared ComfyUI server.
+4. **An approval queue**: anything that writes outside `out/` (a Unity
+   import, kit art, goldens) is a request a human approves once, for that
+   exact command. Failed jobs land there as hand-overs with their reason.
+5. **Judgement tools** return images (concept and mask, banner contact
+   sheet) with the questions no check answers; the agent records a verdict
+   and may reword a concept at most twice.
+
+Guide and example sessions: [docs/agent.md](docs/agent.md); tool reference
+(generated): [docs/agent_tools.md](docs/agent_tools.md).
+
 ## The rules
 
 All rules live in [`conventions/`](conventions/), not in code. C# reads them
@@ -111,7 +141,7 @@ rest). The code stays Python 3.9-compatible.
 .\artpipe.cmd fixtures                                              # build 45 test scenes into out\fixtures
 .\artpipe.cmd build out\fixtures\SM_Messy.ma --class prop_small     # Maya -> Unity prefab
 .\artpipe.cmd banners setup                                          # once: pinned ffmpeg + Chromium for the banners
-.\artpipe.cmd test                                                  # ~990 tests, ~12 min (close the Unity Editor and ComfyUI first)
+.\artpipe.cmd test                                                  # ~1100 tests, ~18 min (close the Unity Editor and ComfyUI first)
 .\artpipe.cmd test -m "not maya and not unity and not comfy and not render"   # pure Python only, ~20 s
 ```
 
@@ -138,6 +168,8 @@ runner uses the exact version pinned in `unity/ProjectSettings` (or `%UNITY%`).
 | `artpipe banners render KIT --template T [--repair]` | one banner: MP4, layout record, contact sheet, provenance, the 17 checks; `--repair` fixes and re-renders |
 | `artpipe banners check FOLDER` | re-run the banner checks on a rendered banner |
 | `artpipe banners batch --template T --games G1,G2` | every game x placement x locale, reused by input hash; summary + contact sheet in `out/banners/batch/` |
+| `artpipe agent setup\|status\|serve\|docs [--check]` | the MCP server: build its venv, show it, run it over stdio (Claude Code does this via `.mcp.json`), regenerate `docs/agent_tools.md` |
+| `artpipe queue list\|show\|approve\|reject\|resolve` | the human side of the approval queue |
 | `artpipe conventions --dump\|--check` | write / verify `conventions/conventions.lock.json` |
 | `artpipe docs [--check]` | regenerate the tables in the docs |
 | `artpipe fixtures [DIR]` / `artpipe unity-fixtures` | build the broken test scenes / the golden FBX + reports the Unity tests import |
@@ -151,13 +183,14 @@ validate/core/               pure Python: rule loader, lock, report types, FBX +
 validate/maya/               headless Maya: CLI, session, checks/, fixes/, FBX export
 gen/                         generation: core/ (pure: rules, workflows, ComfyUI replies, manifest), comfy.py (server + HTTP), cli.py, workflows/
 banners/                     UA creatives: core/ (pure: rules, template, kit, page, timeline, checks/, repair, batch), render/ (Node + Playwright), templates/, kits/, fonts/, the CLI
+agent/                       the MCP server (server.py), core/ (commands, jobs, queue, reviews, path guard), the job runner, the queue CLI
 pipeline/                    unity.py (batchmode runner, exit-code reconciliation), build.py (end to end)
 unity/                       Unity 6 URP project (Assets/Art is where imported assets go)
 unity/Packages/com.artpipe.importer/
   Editor/                    gate, ModelImporter/TextureImporter rules, GPU checks, batchmode CLI
   Tests/Editor/              EditMode tests + Fixtures~ (golden FBX + reports)
 tests/                       pure-Python tests, integration/ (mayapy), unity_editor/ (real Unity runs), generation/ (real ComfyUI)
-docs/                        conventions.md, unity_import.md, generation.md, banners.md, backlog.md
+docs/                        architecture.md, conventions.md, unity_import.md, generation.md, banners.md, agent.md, agent_tools.md, backlog.md
 ```
 
 ## Design choices
@@ -192,4 +225,4 @@ Known gaps and deferred work are tracked in [docs/backlog.md](docs/backlog.md).
 2. **Unity import pipeline**: done (gate, import rules, GPU budgets, textures, batchmode, end to end)
 3. **AI generation stage**: done. Text to concept image to TRELLIS.2 mesh to Maya to Unity works end to end in one command (`artpipe generate`), with a bounded repair loop and the provenance in the build report
 4. **UA creatives at scale**: done. One template, a kit per game, a 9:16 video checked against four ad networks and repaired, batched with reuse by input hash
-5. MCP agent layer + docs + demo video
+5. **MCP agent layer + docs**: done. 29 MCP tools over the whole pipeline, jobs with a GPU queue, a persistent Maya worker, an approval queue for anything that touches the game, and review tools for the agent's own model

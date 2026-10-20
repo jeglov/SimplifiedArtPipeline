@@ -17,7 +17,7 @@ rem   artpipe gen model CONCEPT_RUN --class C [--seed N] [--repair]   image to l
 rem   artpipe gen ingest MODEL_RUN --class C --name N   GLB to a Maya scene + textures
 rem   artpipe texture FILE... [--class C]  texture rules in Python, before Unity (validate\texture_cli.py)
 rem   artpipe banners setup^|status        pinned renderer tools for UA creatives (banners\cli.py)
-rem   artpipe agent setup^|status^|serve    the MCP server for agents (agent\cli.py, agent\server.py)
+rem   artpipe agent setup^|status^|serve^|docs   the MCP server for agents (agent\cli.py, agent\server.py)
 rem   artpipe queue list^|show^|approve^|reject^|resolve   the approval queue (a human decides)
 rem   artpipe py [ARGS]                raw mayapy, e.g. "artpipe py -m pip list"
 rem
@@ -77,6 +77,7 @@ if /i "%CMD%"=="gen" "%MAYAPY%" -m gen.cli %ARGS% & goto done
 if /i "%CMD%"=="texture" "%MAYAPY%" -m validate.texture_cli %ARGS% & goto done
 if /i "%CMD%"=="banners" "%MAYAPY%" -m banners.cli %ARGS% & goto done
 if /i "%CMD%"=="agent" if /i "%SUB%"=="serve" goto agent_serve
+if /i "%CMD%"=="agent" if /i "%SUB%"=="docs" goto agent_docs
 if /i "%CMD%"=="agent" "%MAYAPY%" -m agent.cli %ARGS% & goto done
 if /i "%CMD%"=="queue" "%MAYAPY%" -m agent.queue_cli %ARGS% & goto done
 if /i "%CMD%"=="test" "%MAYAPY%" -m pytest -q "%ROOT%\tests" %ARGS% & goto done
@@ -97,6 +98,12 @@ if not exist "%AGENT_TOOLS%\agent-venv\Scripts\python.exe" (
     exit /b 2
 )
 "%AGENT_TOOLS%\agent-venv\Scripts\python.exe" -m agent.server & goto done
+
+:agent_docs
+rem docs/agent_tools.md from the server's own tool list (needs the venv's MCP SDK).
+set "AGENT_TOOLS=%ARTPIPE_TOOLS%"
+if not defined AGENT_TOOLS set "AGENT_TOOLS=%LOCALAPPDATA%\artpipe"
+"%AGENT_TOOLS%\agent-venv\Scripts\python.exe" -m agent.docs %ARGS% & goto done
 
 :done
 exit /b %ERRORLEVEL%

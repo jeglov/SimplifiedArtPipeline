@@ -312,3 +312,108 @@ against its original, and over MCP: `review_concept` returns text then a
 PNG with the questions, `record_review` stores the verdict, path refusals,
 a kit image, `retry_concept` refused past the budget, and `review_banner`
 returning the sheet of a real render.
+
+## Example sessions (step 5.8)
+
+Three sessions as an agent runs them, tool calls abbreviated (`→` is what
+comes back). The full tool reference is [agent_tools.md](agent_tools.md),
+generated from the server (`artpipe agent docs`; a test fails if it is
+stale).
+
+**1. Validate, fix, re-check (free: everything lands in `out/`).**
+
+```
+artpipe_info()                                → versions, conventions sha256s, gated actions
+read_conventions("mesh_budgets")              → the class budgets (never guess a number)
+validate(file="out/fixtures/SM_Messy.ma", asset_class="prop_small")
+                                              → exit 1, the report path, the failing check ids
+list_checks()                                 → which of those have a safe fix
+apply_fix(file=..., asset_class="prop_small", fix_id="transform.frozen")
+                                              → exit 0, the fixed .ma under out/agent/calls/, the fix record
+run_check(file=<the fixed .ma>, asset_class="prop_small", check_id="transform.frozen")
+                                              → passed: the agent moves on to the next failure
+validate(file=<the fixed .ma>, asset_class="prop_small", export=true)
+                                              → exit 0, canonical FBX + linked report in out/
+```
+
+Each fine call runs in the Maya worker (0.04-0.12 s), not a 4.6 s cold
+mayapy. Unfixable failures (an over-budget mesh) stay exit 1: the agent
+reports them, it doesn't edit geometry.
+
+**2. A banner batch, a review, a hand-over.**
+
+```
+banners_kit(kit="spotcap_grove", template="hero_endcard")   → exit 0, kit checks
+banners_batch(template="hero_endcard", games="spotcap_grove")
+                                              → a job id (CPU job: render, checks, repair)
+job_status(job_id)                            → running, banner 1 of N
+job_result(job_id)                            → exit 1: one banner handed over
+queue_list(kind="handover")                   → the item: "banner.text_fit: headline still doesn't fit..."
+review_banner(folder=<a passing banner>)      → the contact sheet (image) + the questions
+record_review(target=<folder>, verdict="ship", notes="hero reads at thumbnail size")
+```
+
+The hand-over waits for a human (`artpipe queue resolve ID --note ...`)
+once the copy is shortened; the next batch reuses every banner whose inputs
+didn't change.
+
+**3. A gated build.**
+
+```
+queue_request(action="build",
+              params='{"scene": "out/agent/calls/<call>/SM_Messy.ma", "asset_class": "prop_small"}',
+              reason="first prop of the batch; all Maya checks pass")
+                                              → approval-…, pending, the exact command
+queue_run(item_id)                            → refused: pending
+      (the human: artpipe queue show approval-… ; artpipe queue approve approval-… --note "ok")
+queue_run(item_id)                            → a job id; the build imports into unity/Assets
+job_result(job_id)                            → exit 0, build report, prefab path
+unity_verify()                                → read-only: every asset under Assets/Art re-checked
+queue_run(item_id)                            → refused: an approval runs once
+```
+
+## Tests, mutation pass and docs (step 5.8)
+
+- `agent/core/safety.py`: the path guard every tool uses (`inside`), moved
+  out of the server so it is unit-tested without an MCP client
+  (`tests/test_agent_safety.py`: `out_evil/` is not under `out/`, `..`
+  escapes, absolute paths, several roots).
+- `tests/mutation_agent.py` (`artpipe py tests/mutation_agent.py`): 17
+  planted bugs over the queue, the path guard, the argument filter and
+  quoting, jobs, locks, the ComfyUI session and the prompt budget, each run
+  against the agent tests that need no MCP client. First pass: 16 killed;
+  "FIFO ignored" survived because only a live-runner test proved the GPU
+  FIFO, so `first_in_line` got a pure test. Second pass: 17 of 17 "killed",
+  but not honestly: runners spawned by the live job tests while a mutant
+  was planted had loaded the mutated `locks.py` and kept it after the file
+  was restored. One never took over a dead GPU lock, FIFO held 20 later
+  jobs behind it, and the live job tests failed under every later mutant,
+  whatever it was. The pass now cancels every job a mutant's tests started.
+  Third pass, clean: two real survivors. "Edited command accepted" (the
+  tamper test edited args or params, and the parameter rebuild catches
+  either on its own; only a consistent edit of both needs the sha256: now a
+  test case) and "stops a kept server" (both kept cases would not have
+  stopped anyway; the missing case is a server the session started and
+  someone marks kept meanwhile: now a test). Fourth pass: 17 of 17. A
+  waiting runner runs the code it was spawned with outside tests too
+  (backlog #68).
+- `docs/agent_tools.md`: generated from the server's own `list_tools`
+  (names, descriptions, input schemas, grouped); `artpipe agent docs
+  --check` fails on drift, and a test runs it.
+- [architecture.md](architecture.md): the one-page overview for a reviewer.
+
+## What the agent layer can't do yet
+
+- **Approve safely across a team.** Approvals are files; the Claude Code
+  permission rules stop the agent's file tools, not a shell (#65). Signed
+  decisions and signed reports (#38) are the fix.
+- **Drive Unity cheaply.** Every Unity call boots batchmode (15-20 s warm);
+  there is no Unity worker like the Maya one (#30).
+- **Escalate past a seed.** The repair loops re-roll seeds and the agent can
+  reword a concept twice; a structural failure (a crate's slats folding in
+  their UV charts) still goes to a human (#53).
+- **See a 3D model.** The judgement tools return 2D images (concept, mask,
+  banner frames). A turntable render of the generated mesh would let the
+  model judge shape and texture fidelity (#66, #56).
+- **Run anywhere but this machine.** Windows, a local GPU, Maya 2023 and a
+  licensed Unity; no CI (#16, #31).

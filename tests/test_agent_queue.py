@@ -67,15 +67,15 @@ def test_rejected_is_never_runnable(tmp_path):
         queue.approved_args(item["id"], tmp_path)
 
 
-@pytest.mark.parametrize("tamper", ["args", "params"])
+@pytest.mark.parametrize("tamper", ["args", "params", "both"])
 def test_a_command_changed_after_approval_is_refused(tmp_path, tamper):
     item = queue.request("banners_art_logo", {"kit": "spotcap_grove"}, "font changed", tmp_path)
     queue.decide(item["id"], True, queue=tmp_path)
     raw = queue.read(item["id"], tmp_path)
-    if tamper == "args":
+    if tamper in ("args", "both"):
         raw["args"] = ["banners", "art", "logo", "other_game"]      # the file edited behind the queue's back
-    else:
-        raw["params"] = {"kit": "other_game"}
+    if tamper in ("params", "both"):
+        raw["params"] = {"kit": "other_game"}       # "both": consistent, so only the sha256 catches it
     queue.write(raw, tmp_path)
     with pytest.raises(ValueError, match="refused"):
         queue.approved_args(item["id"], tmp_path)

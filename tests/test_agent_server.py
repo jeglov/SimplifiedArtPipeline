@@ -93,3 +93,10 @@ def test_a_gpu_job_reports_comfyui_progress_over_mcp():
     steps = [s["comfy_progress"]["step"] for s in r["statuses"] if s.get("comfy_progress")]
     assert steps and max(steps) == 8 and steps == sorted(steps)   # 8 sampler steps, never backwards
     assert r["result"]["state"] == "done" and r["result"]["exit_code"] in (0, 1)
+
+
+def test_the_tool_reference_is_current():
+    # docs/agent_tools.md is generated from the server's own tool list (artpipe agent docs).
+    proc = subprocess.run([str(VENV_PY), "-m", "agent.docs", "--check"], cwd=str(ROOT), stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, universal_newlines=True, encoding="utf-8", timeout=300)
+    assert proc.returncode == 0, proc.stderr

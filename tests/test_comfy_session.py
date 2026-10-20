@@ -132,3 +132,13 @@ def test_progress_reads_the_latest_bar_after_an_offset(tmp_path):
     assert comfy.progress(log, since=offset)["step"] == 2
     assert comfy.progress(log, since=10 ** 9)["step"] == 2      # a rewritten log: read from the start
     assert comfy.progress(tmp_path / "missing.log") is None
+
+
+def test_a_server_this_session_started_is_kept_if_marked_during_the_session(monkeypatch, tmp_path):
+    # `gen server start` (keep) while a job's session holds the server it started: the job's
+    # exit must not stop it. The other kept cases would not stop anyway (the mutation pass showed it).
+    f = Fake(monkeypatch)
+    with comfy.session(RULES, work=tmp_path) as started:
+        assert started
+        comfy.keep(tmp_path)
+    assert f.stops == 0 and f.up

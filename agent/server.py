@@ -28,6 +28,7 @@ from agent.core import ToolError as AgentToolError
 from agent.core import commands
 from agent.core import jobs
 from agent.core import rules as agent_rules
+from agent.core import safety
 
 ROOT = commands.ROOT
 RULES = agent_rules.load()
@@ -179,11 +180,7 @@ def _call_dir(kind: str) -> Path:
     return d
 
 
-def _rel(p: Path) -> str:
-    try:
-        return p.resolve().relative_to(ROOT).as_posix()
-    except ValueError:
-        return str(p)
+_rel = safety.rel
 
 
 def _maya(args) -> Dict[str, Any]:
@@ -259,15 +256,7 @@ def banners_check(folder: str, check_ids: str = "") -> Dict[str, Any]:
 # the Unity project or overwrite kit art (build, generate, banners art) go
 # through the approval queue (step 5.6).
 
-def _inside(path: str, *roots: str) -> Path:
-    """A path the agent named, resolved and refused unless it lies under one of `roots` (repo-relative)."""
-    p = (ROOT / path) if not Path(path).is_absolute() else Path(path)
-    p = p.resolve()
-    for r in roots:
-        base = (ROOT / r).resolve()
-        if p == base or base in p.parents:
-            return p
-    raise ValueError("%s is outside %s: refused" % (path, ", ".join(roots)))
+_inside = safety.inside   # agent/core/safety.py: unit-tested and mutation-tested without an MCP client
 
 
 @tool(description="Validate a Maya scene (.ma/.mb/.fbx) against its asset class: every check, optional "
