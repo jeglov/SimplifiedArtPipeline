@@ -20,7 +20,7 @@ Read on 2026-10-20 from each network's own spec page (URLs in the YAML):
 | Codec / container | H.264 in MP4 | Unity: "H.264-encoded MP4 format" | Meta: H.264; AppLovin: MP4/MOV/M4V |
 | Frame rate | constant, 30 fps | Meta: "fixed frame rate" | no network names a number: 30 is a house rule |
 | Duration | 6-60 s | Unity, AppLovin: 60 s max | Meta 15 min, TikTok 10 min; no published minimum (6 s is a house rule) |
-| File size | <= 100 MB, warn > 10 MB | Unity: 100 MB max, 10 MB recommended | TikTok 500 MB, AppLovin 1 GB, Meta 4 GB |
+| File size | <= 100 MB, warn > 10 MB (decimal: 10^8 and 10^7 bytes, the stricter reading of "MB") | Unity: 100 MB max, 10 MB recommended | TikTok 500 MB, AppLovin 1 GB, Meta 4 GB |
 | Bitrate | >= 516 kbps | TikTok | |
 | Safe zone | 14 % top, 35 % bottom, 6 % sides | Meta (the only one stated in text) | TikTok and Unity publish overlay templates as images only |
 | End card | required | Unity: "all video ads must also include an end card" | |
@@ -210,3 +210,66 @@ What the first renders showed (looked at, not only checked):
 * The headline "Merge mushrooms, grow a magic grove!" wraps to 3 lines in a
   2-line area and its last line sits on the hero: left in on purpose for the
   text-fit check and the repair (steps 4.5, 4.6).
+
+## Banner checks (step 4.5)
+
+`artpipe banners render` runs them after every render; `artpipe banners
+check FOLDER` re-runs them on a rendered banner (the context is rebuilt
+from the folder, so a rule change doesn't need a re-render). Report:
+`banner.report.json` next to `banner.mp4`, `conventions/report.schema.json`,
+`asset_class` = the placement. One module per check in
+`banners/core/checks/`, run cheapest first:
+
+| Check | Severity | Reads | Fails when |
+|---|---|---|---|
+| `banner.dimensions` | error | ffprobe | not the placement's width x height |
+| `banner.format` | error | ffprobe | not MP4 / H.264 / yuv420p, or an audio stream in a silent placement |
+| `banner.duration` | error | ffprobe | outside 6-60 s, or the frame count isn't duration x fps |
+| `banner.frame_rate` | error | every packet timestamp | any interval isn't 1/fps (variable frame rate, a dropped frame) |
+| `banner.file_size` | error | file | > 100 MB (Unity) |
+| `banner.file_budget` | warning | file | > 10 MB (Unity's recommendation) |
+| `banner.bitrate` | error | file size / duration | < 516 kbps (TikTok) |
+| `banner.font_fallback` | error | Chromium's font record | any glyph drawn by a system font |
+| `banner.text_fit` | error, fixable | layout | more lines than `max_lines`, or the text block wider / taller than its area |
+| `banner.text_size` | warning | layout | text drawn under 2 % of the frame height (38 px), at its smallest visible scale |
+| `banner.cta_size` | warning | layout | button under 6 % of the height, or its label under 3.5 % |
+| `banner.safe_zone` | error | layout, every frame | a text line box, the logo or the CTA outside Meta's margins on any fully visible frame (pulses included) |
+| `banner.logo` | error | layout | drawn aspect differs from the file's by > 1 %, a rotating logo, or the logo cut by the frame edge |
+| `banner.end_card` | error | layout | logo and CTA not fully visible on every frame from `end_card_from_s`, or held < 2 s |
+| `banner.first_frame` | error | decoded frame 0 | luminance spread < 8 (a blank poster), or nothing but the background on screen |
+| `banner.contrast` | error, fixable | text-hidden render | WCAG contrast of the text colour vs. the pixels behind its line boxes < 3:1 on the worst 10 % |
+| `banner.cta_contrast` | error, fixable | colours + text-hidden render | label vs. fill < 4.5:1, or button vs. the scene behind it < 3:1 |
+
+Design choices worth knowing:
+
+* **Content, not boxes.** The safe zone judges the drawn line boxes of a
+  text and the drawn rectangle of the logo, not the layer's box: a short
+  headline in a wide box is fine; three overflowing lines, centred, poke out
+  of the top even though the box is inside.
+* **Visible frames only.** A layer is judged where it is fully opaque
+  (`visible_opacity` 0.99): an entrance sliding in from off-screen while it
+  fades in is not a safe-zone failure; a CTA pulsing to 1.05 at full opacity
+  is checked at its peak.
+* **The text shadow doesn't count** for contrast: the ratio is the text
+  colour against the scene. The shadow is margin on top.
+* **"MB" is read as decimal** (10^8 bytes for Unity's 100 MB): if a network
+  meant MiB, a decimal limit is stricter, never looser.
+* House rules (text size, CTA size, contrast bars, end-card hold, first-frame
+  spread) live in `conventions/banners.yaml` `checks:`, each with its reason.
+
+**On the real banner** (Spotcap Grove, en): 15 of 17 pass, and the two
+failures are exactly what the contact sheet showed by eye: `banner.text_fit`
+(the headline wraps to 3 lines, 339 px in a 230 px area) and
+`banner.safe_zone` (those 3 centred lines reach 45 px above the safe zone).
+Contrast is 8.0:1 for the headline on the regenerated dark background; on the
+first, bright background it would have been the third failure.
+
+Tests: `tests/test_banner_checks.py` builds a synthetic banner (the real
+template at 108x192, a layout from its own keyframes, tiny PNGs) and proves
+each check passes, fails on its defect, and sits on the right side of its
+boundary (exactly 516 kbps, exactly 100 MB, the safe-zone edge + 0.5 px,
+the grey where cream text reaches exactly 3:1, a 2.0 s end card).
+`tests/test_banner_build.py` runs all 17 on a real 1 s render: only
+duration and end card fail, as they must. Three planted bugs (contrast bar
+0.05 lower, safe zone judging fading frames, an inclusive bitrate floor)
+each turned the suite red.

@@ -6,6 +6,8 @@
                                              kit.* checks -> out/banners/kits/<kit>.<template>.kit.report.json
     artpipe banners render KIT --template T [--placement P] [--locale L]
                                              one banner -> out/banners/<kit>/<template>/<placement>/<locale>/
+                                             + banner.* checks -> banner.report.json in that folder
+    artpipe banners check FOLDER             re-run the banner checks on a rendered banner
     artpipe banners art hero KIT --from CONCEPT_RUN
     artpipe banners art background KIT --prompt P [--seed N] [--width W --height H]
     artpipe banners art logo KIT
@@ -24,7 +26,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Sequence, Tuple
 
-from banners import art, build, tools
+from banners import art, build, check as banner_check, tools
 from banners.core import ToolError
 from banners.core import checks as banner_checks
 from banners.core import kit as kit_mod
@@ -61,6 +63,18 @@ def check_kit(ctx: KitContext, out_dir: Path = OUT / "kits") -> Tuple[Report, Pa
     return report, out
 
 
+def _verdict(report: Report, path: Path, sheet: Optional[Path] = None) -> int:
+    stream = sys.stdout if report.exit_code == EXIT_OK else sys.stderr
+    extra = " (sheet: %s)" % report_path(sheet) if sheet else ""
+    print("artpipe banners: %s %s%s" % (report.status.value.upper(), report_path(path), extra), file=stream)
+    for r in report.results:
+        if not r.passed:
+            print("  %s %s: %s" % (r.severity.value, r.id, r.message), file=stream)
+    if report.tool_error:
+        print("  tool error: %s" % report.tool_error, file=stream)
+    return report.exit_code
+
+
 def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="artpipe banners", description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="command", required=True)
@@ -78,6 +92,8 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     rd.add_argument("--placement", default="ua_video_9x16")
     rd.add_argument("--locale", default="en")
     rd.add_argument("--out", default=str(OUT))
+    ck = sub.add_parser("check", help="re-run the banner checks on a rendered banner folder")
+    ck.add_argument("folder", help="out/banners/<kit>/<template>/<placement>/<locale>")
     a = sub.add_parser("art", help="make a kit image with its provenance sidecar")
     a_sub = a.add_subparsers(dest="slot", required=True)
     h = a_sub.add_parser("hero", help="cut-out of a passing Phase 3 concept run")
@@ -121,8 +137,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 return report.exit_code
             r = build.render_banner(rules, ctx.template, ctx.kit, ctx.fonts, args.placement, args.locale,
                                     Path(os.path.abspath(args.out)))
-            print("artpipe banners: OK %s (sheet: %s)" % (report_path(r.mp4), report_path(r.folder / "sheet.png")))
-            return EXIT_OK
+            return _verdict(*banner_check.check(rules, r.folder, ctx.template), sheet=r.folder / "sheet.png")
+        if args.command == "check":
+            return _verdict(*banner_check.check(rules, Path(os.path.abspath(args.folder))))
         kit_dir = kit_mod.load(args.kit).path
         if args.slot == "hero":
             out = art.hero(kit_dir, Path(os.path.abspath(args.concept_run)))

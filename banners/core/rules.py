@@ -85,6 +85,18 @@ class LicenceRules:
 class CheckRules:
     """House rules for the kit and banner checks (no network publishes these)."""
     max_upscale: float
+    visible_opacity: float
+    safe_zone_tolerance_px: float
+    min_text_share: float
+    cta_min_height_share: float
+    cta_min_text_share: float
+    contrast_min: float
+    contrast_percentile: float
+    cta_text_contrast_min: float
+    cta_fill_contrast_min: float
+    end_card_min_s: float
+    first_frame_min_std: float
+    logo_aspect_tolerance: float
 
 
 @dataclass(frozen=True)
@@ -210,9 +222,27 @@ def _checks(r: _Reader) -> CheckRules:
     up = r.get("max_upscale", float)
     if up < 1.0:
         raise ConventionError("%s.max_upscale: must be >= 1.0, got %s" % (r.where, up))
-    c = CheckRules(up)
+    opacity = r.get("visible_opacity", float)
+    if not 0.0 < opacity <= 1.0:
+        raise ConventionError("%s.visible_opacity: must be in (0, 1]" % r.where)
+    ratios = {k: r.get(k, float) for k in ("contrast_min", "cta_text_contrast_min", "cta_fill_contrast_min")}
+    for k, v in ratios.items():
+        if not 1.0 <= v <= 21.0:
+            raise ConventionError("%s.%s: a WCAG ratio is 1-21, got %s" % (r.where, k, v))
+    c = CheckRules(up, opacity, _nonneg(r, "safe_zone_tolerance_px"), _share(r, "min_text_share"),
+                   _share(r, "cta_min_height_share"), _share(r, "cta_min_text_share"), ratios["contrast_min"],
+                   _share(r, "contrast_percentile"), ratios["cta_text_contrast_min"], ratios["cta_fill_contrast_min"],
+                   _nonneg(r, "end_card_min_s"), _nonneg(r, "first_frame_min_std"),
+                   _nonneg(r, "logo_aspect_tolerance"))
     r.done()
     return c
+
+
+def _nonneg(r: _Reader, key: str) -> float:
+    val = r.get(key, float)
+    if val < 0:
+        raise ConventionError("%s.%s: must be >= 0, got %s" % (r.where, key, val))
+    return val
 
 
 def parse(data: dict) -> BannerRules:

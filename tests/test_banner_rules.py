@@ -61,7 +61,7 @@ def test_unknown_placement_lists_the_options():
     (P + ("width",), 1081, "even width"),
     (P + ("width",), 0, "> 0"),
     (P + ("fps",), True, "bool"),
-    (P + ("target_bytes",), 104857601, "target_bytes above max_bytes"),
+    (P + ("target_bytes",), 100000001, "target_bytes above max_bytes"),
     (P + ("duration_s",), {"min": 61.0, "max": 60.0}, "min 61.0 > max"),
     (P + ("safe_zone",), {"top": 0.5, "bottom": 0.1, "left": 0.0, "right": 0.0}, r"\[0, 0.5\)"),
     (P + ("safe_zone",), {"top": 0.49, "bottom": 0.49, "left": 0.49, "right": 0.49}, None),

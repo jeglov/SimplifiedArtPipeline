@@ -24,6 +24,7 @@ from banners.core import page as page_mod
 from banners.core.kit import Font, Kit
 from banners.core.rules import BannerRules
 from banners.core.template import Template
+from validate.core.paths import report_path
 
 OUT = Path(__file__).resolve().parents[1] / "out" / "banners"
 SHEET_TILE = 270   # px per tile: a phone-feed thumbnail is about this size
@@ -72,7 +73,8 @@ def render_banner(rules: BannerRules, template: Template, kit: Kit, fonts: Mappi
                          tile_width=SHEET_TILE)
     layout = dict(record, page={"frames": pg.frames, "fps": pg.fps, "key_frames": keys, "colours": pg.colours,
                                 "font_px": pg.font_px, "text_layers": list(pg.text_layers),
-                                "locale": locale, "placement": placement})
+                                "locale": locale, "placement": placement,
+                                "template": report_path(template.path), "kit": kit.id})
     layout.pop("refused", None)
     with (folder / "layout.json").open("w", encoding="utf-8", newline="\n") as fh:
         fh.write(json.dumps(layout, sort_keys=True, separators=(",", ":")) + "\n")

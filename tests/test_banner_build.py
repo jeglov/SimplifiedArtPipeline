@@ -81,3 +81,24 @@ def test_rendering_again_gives_the_same_file(banner, tmp_path):
     assert again.mp4.read_bytes() == banner.mp4.read_bytes()
     a = json.loads((again.folder / "layout.json").read_text(encoding="utf-8"))
     assert a == banner.layout
+
+
+def test_the_real_checks_on_the_real_render(banner):
+    import jsonschema
+    from banners import check
+    from validate.core.conventions import DEFAULT_DIR
+    report, path = check.check(RULES, banner.folder, SHORT)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    jsonschema.validate(data, json.loads((DEFAULT_DIR / "report.schema.json").read_text(encoding="utf-8")))
+    failed = sorted(r["id"] for r in data["results"] if not r["passed"])
+    # A 1 s test spot: too short for the placement, and its end card holds 0.4 s. Everything else passes,
+    # pixels included (decoded frame 0, contrast on the text-hidden renders).
+    assert failed == ["banner.duration", "banner.end_card"], [r["message"] for r in data["results"] if not r["passed"]]
+    assert data["asset_class"] == "ua_video_9x16" and data["tool"] == "artpipe.banners.banner"
+    assert data["source"]["path"].endswith("banner.mp4") and data["tool_error"] is None
+
+
+def test_check_rebuilds_its_context_from_the_folder_alone(banner):
+    from banners import check
+    ctx = check.context(RULES, banner.folder)       # template found from layout.json
+    assert ctx.template.id == "short_endcard" and ctx.placement.id == "ua_video_9x16"

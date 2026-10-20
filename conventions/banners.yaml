@@ -85,6 +85,35 @@ checks:
   # kit.images: largest factor an image is drawn at (box size x animated
   # scale). Above it a layer looks soft on a phone held at arm's length.
   max_upscale: 1.5
+  # A layer counts as visible (judged by safe zone, logo, end card, text size)
+  # from this opacity: entrance frames still fading in are not judged.
+  visible_opacity: 0.99
+  # Sub-pixel slack for layout rounding when comparing rectangles.
+  safe_zone_tolerance_px: 0.5
+  # banner.text_size: the feed shows the video at about a quarter of the
+  # screen before a tap; text under 2 % of the frame height (38 px at 1920)
+  # doesn't read there. A warning.
+  min_text_share: 0.02
+  # banner.cta_size: the button at least 6 % of the frame height (115 px),
+  # its label at least 3.5 % (67 px). The first render's 65 px label barely
+  # read in the contact sheet.
+  cta_min_height_share: 0.06
+  cta_min_text_share: 0.035
+  # banner.contrast: WCAG 2.x AA for large text (all banner text is >= 24 px
+  # bold): 3:1, judged on the worst 10 % of the pixels behind the text.
+  contrast_min: 3.0
+  contrast_percentile: 0.1
+  # banner.cta_contrast: the label on its button at WCAG AA for normal text
+  # (4.5:1); the button against the scene at WCAG's UI-component bar (3:1).
+  cta_text_contrast_min: 4.5
+  cta_fill_contrast_min: 3.0
+  # banner.end_card: logo + CTA held at least this long at the end.
+  end_card_min_s: 2.0
+  # banner.first_frame: luminance spread (std dev, 0-255) of frame 0; a black
+  # or single-colour poster frame is under ~3.
+  first_frame_min_std: 8.0
+  # banner.logo: drawn aspect vs. the file's, as a share (1 %).
+  logo_aspect_tolerance: 0.01
 
 # Placements: one per output format. Sources read 2026-10-20:
 #   meta    https://www.facebook.com/business/ads-guide/update/video/instagram-reels
@@ -105,8 +134,9 @@ placements:
     duration_s:
       min: 6.0         # house rule: no network minimum is published; under 6 s there is no room for an end card
       max: 60.0        # applovin and unity: 60 s or less (strictest of the four)
-    max_bytes: 104857600    # unity: 100 MB maximum (meta 4 GB, tiktok 500 MB, applovin 1 GB)
-    target_bytes: 10485760  # unity: 10 MB recommended -> a warning above it
+    # "MB" read as decimal (10^6 bytes), the stricter reading of the specs.
+    max_bytes: 100000000    # unity: 100 MB maximum (meta 4 GB, tiktok 500 MB, applovin 1 GB)
+    target_bytes: 10000000  # unity: 10 MB recommended -> a warning above it
     min_bitrate_kbps: 516   # tiktok: "Bitrate: More than or equal to 516 kbps"
     # meta: keep "at least 14% of the top, 35% of the bottom, and 6% on each side"
     # free of text and logos (platform UI covers them). TikTok publishes its
