@@ -226,3 +226,55 @@ gen_ingest on an existing model run (marker maya), the input schemas, and
 the gated tools' absence. `gen_model` uses the same GPU job path as
 `gen_concept` (proven with live progress in 5.2) and the Phase 3 CLI; a
 full image-to-3D over MCP (~5 GPU minutes) isn't in the suite.
+
+## The approval queue (step 5.6)
+
+```
+out/agent/queue/<id>.json      conventions/agent_queue.schema.json
+```
+
+**Approvals.** A gated action (`conventions/agent.yaml` `gated`: `build`,
+`generate`, `banners_art_hero`, `banners_art_background`,
+`banners_art_logo`, `golden_rerecord`: everything that writes outside `out/`)
+is never a tool. The agent calls `queue_request(action, params, reason)`:
+the item stores the exact artpipe command, its sha256, what it will write
+("imports the asset into unity/Assets") and the agent's reason. A human
+decides on the command line:
+
+```powershell
+.\artpipe.cmd queue list
+.\artpipe.cmd queue show approval-1a2b3c4d5e
+.\artpipe.cmd queue approve approval-1a2b3c4d5e --note "ok, first coin of the batch"
+```
+
+Then the agent calls `queue_run(id)`, which starts the job only if the item
+is approved, hasn't run yet, and its command is unchanged (the stored
+sha256, and the parameters rebuilt into the same command). An approval runs
+once. There is no MCP tool to approve, reject or resolve: a test asserts it.
+
+**Hand-overs.** Every job that ends with exit 1 (an asset or banner the
+repair loop handed over, a failed check nothing could fix) files a
+hand-over item (one per job) with the lines a human should read first: the
+verdict and each failing check. `artpipe queue resolve ID --note ...`
+closes it.
+
+**What it does not protect against.** Approvals are files. The MCP server
+gives the agent no way to approve, but an agent that also has file-editing
+tools (Claude Code does) could write an "approved" item itself; the sha256
+protects the command, not the decision. Two layers close that: Claude Code
+permission rules that deny writes to `out/agent/queue/` (and the agent's
+own repo config), and, for teams, signed decisions (backlog #65, with #38).
+`.claude/settings.json` (committed) now denies Claude Code's file tools any
+write under `out/agent/queue/` and `.claude/` (so the rule can't be edited
+away); probed: a Write into the queue folder is refused. A shell command
+could still write there, so #65 stays open for signed decisions.
+
+Tested (`tests/test_agent_queue.py`): the gated list in conventions equals
+the queue's actions; a request does nothing; bad requests are refused (an
+unknown action, a missing parameter, no reason, cmd.exe syntax in a prompt);
+approve-then-run once; a rejected item never runs; a command or parameters
+edited after approval are refused; hand-overs are one per job and resolve;
+ids are checked; and over MCP the full round trip (request, `queue_run`
+refused while pending, `artpipe queue approve` by the human, `queue_run`
+regenerates the logo of a kit copy, a second run refused), no
+approve-like tool exists, and a job that exits 1 lands in the queue.

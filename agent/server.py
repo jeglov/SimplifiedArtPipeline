@@ -360,6 +360,51 @@ def read_conventions(name: str) -> Dict[str, Any]:
     return {"name": p.name, "text": p.read_text(encoding="utf-8")}
 
 
+# --- the approval queue (step 5.6) ---------------------------------------------------------
+
+from agent.core import queue  # noqa: E402  (grouped with its tools)
+
+
+@tool(description="Ask a human to approve a GATED action (it writes outside out/): build (scene, asset_class, "
+                  "textures) and generate (subject, asset_class, style, name) import into unity/Assets; "
+                  "banners_art_hero (kit, concept_run), banners_art_background (kit, prompt, seed, repair) and "
+                  "banners_art_logo (kit) overwrite kit art; golden_rerecord changes the golden banner. params: a "
+                  "JSON object. reason: why, in a sentence a human reads before approving. Nothing runs until a "
+                  "human runs `artpipe queue approve ID`; then call queue_run(ID).")
+def queue_request(action: str, params: str, reason: str) -> Dict[str, Any]:
+    try:
+        parsed = json.loads(params) if params.strip() else {}
+    except ValueError:
+        raise ValueError("params must be a JSON object, e.g. {\"kit\": \"spotcap_grove\"}")
+    if not isinstance(parsed, dict):
+        raise ValueError("params must be a JSON object")
+    item = queue.request(action, parsed, reason)
+    return {"id": item["id"], "status": item["status"], "effect": item["effect"],
+            "command": "artpipe " + " ".join(item["args"]),
+            "next": "a human approves with `artpipe queue approve %s`; then call queue_run" % item["id"]}
+
+
+@tool(description="The approval queue: approvals (pending, approved, rejected, started) and hand-overs (open, "
+                  "resolved: jobs that ended with exit 1, with the reason). Filter by status or kind.")
+def queue_list(status: str = "", kind: str = "") -> Dict[str, Any]:
+    items = queue.list_items(status=status, kind=kind)
+    return {"items": items, "count": len(items)}
+
+
+@tool(description="One queue item in full (its command, reason, decision, job).")
+def queue_get(item_id: str) -> Dict[str, Any]:
+    return queue.read(item_id)
+
+
+@tool(description="Start an APPROVED queue item as a job (refused unless a human approved it and its command is "
+                  "unchanged). Returns the job id: follow it with job_status / job_result.")
+def queue_run(item_id: str) -> Dict[str, Any]:
+    item, args = queue.approved_args(item_id)
+    started = _start(item["action"], args, item["resource"], meta={"queue_item": item_id})
+    queue.mark_started(item_id, started["job_id"])
+    return dict(started, queue_item=item_id)
+
+
 def main() -> None:
     server.run("stdio")
 

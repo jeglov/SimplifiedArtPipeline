@@ -18,6 +18,7 @@ rem   artpipe gen ingest MODEL_RUN --class C --name N   GLB to a Maya scene + te
 rem   artpipe texture FILE... [--class C]  texture rules in Python, before Unity (validate\texture_cli.py)
 rem   artpipe banners setup^|status        pinned renderer tools for UA creatives (banners\cli.py)
 rem   artpipe agent setup^|status^|serve    the MCP server for agents (agent\cli.py, agent\server.py)
+rem   artpipe queue list^|show^|approve^|reject^|resolve   the approval queue (a human decides)
 rem   artpipe py [ARGS]                raw mayapy, e.g. "artpipe py -m pip list"
 rem
 rem mayapy comes from %MAYAPY% if set, otherwise the newest installed
@@ -77,12 +78,13 @@ if /i "%CMD%"=="texture" "%MAYAPY%" -m validate.texture_cli %ARGS% & goto done
 if /i "%CMD%"=="banners" "%MAYAPY%" -m banners.cli %ARGS% & goto done
 if /i "%CMD%"=="agent" if /i "%SUB%"=="serve" goto agent_serve
 if /i "%CMD%"=="agent" "%MAYAPY%" -m agent.cli %ARGS% & goto done
+if /i "%CMD%"=="queue" "%MAYAPY%" -m agent.queue_cli %ARGS% & goto done
 if /i "%CMD%"=="test" "%MAYAPY%" -m pytest -q "%ROOT%\tests" %ARGS% & goto done
 if /i "%CMD%"=="py" "%MAYAPY%" %ARGS% & goto done
 echo artpipe: unknown command "%CMD%" 1>&2
 
 :usage
-echo usage: artpipe build^|generate^|gen^|texture^|banners^|agent^|validate^|fixtures^|unity-fixtures^|test^|docs^|conventions^|unity^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
+echo usage: artpipe build^|generate^|gen^|texture^|banners^|agent^|queue^|validate^|fixtures^|unity-fixtures^|test^|docs^|conventions^|unity^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
 exit /b 2
 
 :agent_serve

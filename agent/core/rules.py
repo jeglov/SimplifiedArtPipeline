@@ -25,6 +25,7 @@ class AgentRules:
     mcp_version: str
     lock: str
     server: ServerRules
+    gated: tuple = ()
 
 
 def _version(r: _Reader, key: str) -> str:
@@ -50,7 +51,11 @@ def parse(data: dict) -> AgentRules:
     s = root.sub("server")
     server = ServerRules(s.get("name", str), _positive(s, "call_timeout_s"))
     s.done()
-    rules = AgentRules(_version(root, "python"), venv, _version(root, "mcp_version"), root.get("lock", str), server)
+    gated = root.get("gated", list)
+    if not gated or not all(isinstance(g, str) and re.match(r"^[a-z][a-z0-9_]*$", g) for g in gated):
+        raise ConventionError("%s.gated: a list of snake_case action names" % FILE)
+    rules = AgentRules(_version(root, "python"), venv, _version(root, "mcp_version"), root.get("lock", str), server,
+                       tuple(gated))
     root.done()
     return rules
 

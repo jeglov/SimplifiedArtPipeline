@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(/out/agent/queue/**)",
+      "Edit(/.claude/**)"
+    ]
+  }
+}

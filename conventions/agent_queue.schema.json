@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://artpipe.local/conventions/agent_queue.schema.json",
+  "title": "Approval queue item (agent/core/queue.py)",
+  "description": "out/agent/queue/<id>.json: an approval (a gated action the agent asked for: only a human decides, the approval covers the exact command by sha256) or a hand-over (a job that ended with exit 1, for a human).",
+  "type": "object",
+  "required": ["schema_version", "id", "kind", "created", "status"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "id": {"type": "string", "pattern": "^(approval|handover)-[0-9a-f]{10}$"},
+    "kind": {"enum": ["approval", "handover"]},
+    "created": {"type": "string"},
+    "decided": {"type": ["object", "null"], "required": ["by", "at", "note"]}
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "kind": {"const": "approval"},
+        "status": {"enum": ["pending", "approved", "rejected", "started"]},
+        "action": {"type": "string"},
+        "effect": {"type": "string"},
+        "params": {"type": "object"},
+        "args": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "args_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "resource": {"enum": ["cpu", "gpu"]},
+        "reason": {"type": "string", "minLength": 1},
+        "job_id": {"type": ["string", "null"]},
+        "started": {"type": "string"}
+      },
+      "required": ["action", "effect", "params", "args", "args_sha256", "resource", "reason", "job_id"]
+    },
+    {
+      "properties": {
+        "kind": {"const": "handover"},
+        "status": {"enum": ["open", "resolved"]},
+        "job_id": {"type": "string"},
+        "tool": {"type": "string"},
+        "command": {"type": "string"},
+        "reason": {"type": "string", "minLength": 1},
+        "resolution": {"type": ["object", "null"]}
+      },
+      "required": ["job_id", "tool", "command", "reason", "resolution"]
+    }
+  ]
+}

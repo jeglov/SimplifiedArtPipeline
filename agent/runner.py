@@ -56,6 +56,12 @@ def run(job_id: str, jobs_dir: Path = jobs.JOBS, locks_dir: Path = jobs.LOCKS) -
         meaning = "timed out" if timed_out else commands.EXIT_MEANING.get(code, "unknown exit code")
         rec.update(state="done", finished=jobs.now(), exit_code=code, timed_out=timed_out, meaning=meaning)
         jobs.write(rec, jobs_dir)
+        if code == 1 and jobs_dir == jobs.JOBS:
+            # Handed over (or failed with nothing to fix): a human gets it in the queue.
+            from agent.core import queue
+            out_text = (d / "stdout.log").read_text(encoding="utf-8", errors="replace")
+            err_text = (d / "stderr.log").read_text(encoding="utf-8", errors="replace")
+            queue.handover(rec, queue.handover_reason(out_text, err_text))
         return code
     finally:
         if lock is not None:

@@ -16,6 +16,17 @@ venv: agent-venv              # under %ARTPIPE_TOOLS% (default %LOCALAPPDATA%\ar
 mcp_version: "2.2.0"          # must match the lock (checked by setup and a test)
 lock: agent/requirements.lock
 
+# Actions that write outside out/ need a human's approval (agent/core/queue.py
+# ACTIONS; a test checks the two lists agree). The agent can request and,
+# once approved, run them; only `artpipe queue approve` approves.
+gated:
+  - build                    # imports into unity/Assets
+  - generate                 # generates, then imports into unity/Assets
+  - banners_art_hero         # overwrites kit art
+  - banners_art_background
+  - banners_art_logo
+  - golden_rerecord          # changes what the golden test accepts
+
 server:
   name: artpipe
   # A tool that returns its answer directly must answer within this; anything
