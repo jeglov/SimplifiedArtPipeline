@@ -93,7 +93,8 @@ Probed on 2026-10-20 (`tests/test_banner_render.py` keeps each one true):
 | A family that isn't loaded | drawn in Times New Roman, no error, no console message |
 | Fredoka with Cyrillic ("Tap Привет") | 4 glyphs in Fredoka, **6 in Times New Roman**, silently: Fredoka has no Cyrillic |
 | CDP `CSS.getPlatformFontsForNode` | names the fonts that really drew a node and how many glyphs each: the font-fallback check reads this |
-| x264, same PNGs, `-threads 1` twice / `-threads 0` twice | identical within each setting, **different between them**: the thread count changes the bytes, so it is pinned (4) |
+| x264, same PNGs, `-threads 1` twice / `-threads 0` twice | identical within each setting, **different between them**: the thread count changes the bytes, so it is pinned |
+| x264 CBR (VBV), 4 threads, the same 30 real banner frames 3 times (step 4.4) | **3 different files**; 1 thread: identical; CRF with 4 threads: identical. VBV rate control is only deterministic single-threaded, so `threads: 1` (~18 s instead of ~6 s for 240 frames). The 4.2 probe (a 1 s clip, CBR, 4 threads, 2 encodes) happened to match: too small a probe |
 | x264 CRF 20 on a static frame | **150 kbps**: under TikTok's 516 kbps floor |
 | x264 CBR 5 Mbps (`nal-hrd=cbr`) on the same frame | 4.8 Mbps, byte-identical across runs |
 
@@ -160,3 +161,52 @@ Records never hold machine paths: a run outside the repo is recorded as
 on the first test run).
 
 The demo game is **Spotcap Grove**, a made-up casual merge game.
+
+## Rendering a banner (step 4.4)
+
+`artpipe banners render KIT --template T [--placement P] [--locale L]`
+checks the kit first (no render on a failing kit), then
+`banners/build.py`:
+
+1. `banners/core/page.py` writes the page: every box in pixels, every
+   image's fitted rectangle (contain / cover, from the PNG header), font
+   sizes and colours, escaped text, and the state of every layer at every
+   frame as a table. Strings are HTML-escaped (a headline can't inject
+   markup); fonts get page-local family names (`artpipe-display`) so a font
+   installed on the machine can never stand in for the kit's.
+2. `render.mjs` captures all 240 frames, plus a text-hidden pass at the key
+   frames (text and buttons hidden; images, the logo included, stay).
+3. ffmpeg encodes `banner.mp4`; the key frames are decoded back from it
+   and tiled into `sheet.png`. The other ~230 rendered frames are deleted
+   (~2-3 MB each).
+
+Output: `out/banners/<kit>/<template>/<placement>/<locale>/` with
+`banner.mp4`, `layout.json`, `page/index.html`, `frames/` (key frames and
+their text-hidden passes), `decoded/`, `sheet.png`. No machine path is left
+in any of them (the renderer's job file is deleted).
+
+**Key frames** are what a human and the pixel checks look at: the first and
+last frame, every whole second, and the middle of each text, button or logo
+layer's fully visible time (where its contrast is measured). The first
+version picked "the time each track settles", which gave five near-identical
+end-card frames and none with the subline on screen: looking at the sheet
+caught it.
+
+Measured: ~2 min per 8 s banner on this machine (~0.5 s per 1080x1920 frame
+with full-size images; the probe page in 4.2 was lighter), 5.0 MB.
+
+What the first renders showed (looked at, not only checked):
+
+* The first background (seed 7) had red mushrooms everywhere: the red
+  mushroom hero didn't stand out (figure-ground), and the bright canopy sat
+  behind the cream headline. No check sees "the hero doesn't pop" yet
+  (step 4.8). Regenerated (seed 11) with a darker, calmer clearing and a light
+  pool in the centre. "no mushrooms" in the prompt still left a few small
+  ones: naming a thing summons it, and Z-Image runs at cfg 1 (no negative
+  prompt).
+* The hero was a third of the frame wide and the CTA text (65 px in a
+  1080 px frame) barely read at thumbnail size: the template now gives the
+  hero 88 % of the width and the CTA 84 px text in a smaller pill.
+* The headline "Merge mushrooms, grow a magic grove!" wraps to 3 lines in a
+  2-line area and its last line sits on the hero: left in on purpose for the
+  text-fit check and the repair (steps 4.5, 4.6).

@@ -14,7 +14,7 @@ ENC = br.load().encode
 def test_encode_args_pin_threads_and_constant_bitrate():
     argv = video.encode_args("ffmpeg", "frames/f%05d.png", 30, "out.mp4", ENC)
     joined = " ".join(argv)
-    assert argv[argv.index("-threads") + 1] == "4"            # never 0 (= per core)
+    assert argv[argv.index("-threads") + 1] == "1"            # never 0 (= per core); VBV is only stable on 1
     for flag in ("-b:v", "-minrate", "-maxrate"):
         assert argv[argv.index(flag) + 1] == "5000k"
     assert "nal-hrd=cbr:keyint=60:min-keyint=60" in joined     # 2 s at 30 fps

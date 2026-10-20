@@ -52,14 +52,17 @@ tools:
 
 # The x264 encode (banners/core/video.py). Both settings that matter were
 # probed (docs/banners.md):
-#   threads   pinned: -threads 0 (one per core) gave other bytes than 1, so
-#             an auto count would make the file depend on the machine.
+#   threads   1. -threads 0 (one per core) gives other bytes than 1, so the
+#             count must be pinned; and with VBV (needed for CBR) x264 is only
+#             deterministic single-threaded: 4 threads gave 3 different files
+#             from the same 30 frames (CRF with 4 threads was stable). Costs
+#             ~18 s instead of ~6 s for 240 frames, next to ~2 min of render.
 #   CBR       a static frame in CRF 20 came out at 150 kbps, under TikTok's
 #             516 kbps floor; constant bitrate keeps the floor for any content.
 # 5 Mbps x 8 s = 5 MB: under Unity's 10 MB recommendation.
 encode:
   preset: medium
-  threads: 4
+  threads: 1
   bitrate_kbps: 5000
   bufsize_kbps: 10000
   keyint_s: 2.0

@@ -1,11 +1,11 @@
 {
   "from": {
     "height": 1536,
-    "image_sha256": "17e43a301c71e4c9be0dab47629dec613f2c6914b89d73c67971b05d83e8d7c0",
-    "prompt": "Vertical mobile game background art: a dreamy enchanted forest clearing at golden hour, soft-focus, giant red-capped mushrooms far in the background, lush green moss and ferns, warm light rays through the trees, painterly stylized 3D look, gentle depth of field, calm open space in the middle, no characters, no text, no logo, no letters",
-    "run": "out/gen/runs/concept_zimage-af05bfe9fc30",
-    "run_id": "concept_zimage-af05bfe9fc30",
-    "seed": 7,
+    "image_sha256": "5134b12da062f5f204c7f4913a2f2a667056035939d823c023993c67d16dc955",
+    "prompt": "Vertical mobile game background art: a quiet enchanted forest clearing, deep green moss and ferns, tall dark tree trunks framing the edges, soft dark vignette around the borders, a gentle pool of warm glowing light in the centre, floating golden sparkles, painterly stylized 3D look, strong depth of field with a blurred distance, simple and uncluttered, no mushrooms, no characters, no text, no logo, no letters",
+    "run": "out/gen/runs/concept_zimage-7f38de2337c1",
+    "run_id": "concept_zimage-7f38de2337c1",
+    "seed": 11,
     "width": 864,
     "workflow": "concept_zimage"
   },
@@ -34,7 +34,7 @@
     }
   ],
   "output": "background.png",
-  "output_sha256": "17e43a301c71e4c9be0dab47629dec613f2c6914b89d73c67971b05d83e8d7c0",
+  "output_sha256": "5134b12da062f5f204c7f4913a2f2a667056035939d823c023993c67d16dc955",
   "schema_version": "1.0",
   "slot": "background",
   "tool": "artpipe.banners.art"

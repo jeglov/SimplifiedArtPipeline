@@ -1,0 +1,26 @@
+# A 1 s version of hero_endcard for the render tests: same layers and slots,
+# so the real kit fills it, 30 frames instead of 240.
+version: 1
+id: short_endcard
+description: 1 s test template (tests/test_banner_build.py).
+duration_s: 1.0
+end_card_from_s: 0.6
+slots:
+  colour: [text, text_shadow, cta, cta_text]
+  font: [display, body]
+  image: [background, hero, logo]
+  text: [headline, subline, cta]
+layers:
+  - {id: background, kind: image, image: background, fit: cover, box: [0.0, 0.0, 1.0, 1.0],
+     tracks: {scale: [[0.0, 1.1], [1.0, 1.0]]}}
+  - {id: hero, kind: image, image: hero, fit: contain, box: [0.06, 0.26, 0.88, 0.34]}
+  - {id: headline, kind: text, text: headline, font: display, weight: 700, colour: text, shadow: text_shadow,
+     size: 0.04, line_height: 1.05, max_lines: 2, box: [0.07, 0.145, 0.86, 0.1],
+     tracks: {opacity: [[0.0, 1.0], [0.4, 1.0], [0.5, 0.0]]}}
+  - {id: subline, kind: text, text: subline, font: body, weight: 700, colour: text, shadow: text_shadow,
+     size: 0.03, max_lines: 2, box: [0.07, 0.575, 0.86, 0.07], tracks: {opacity: [[0.0, 1.0], [0.4, 1.0], [0.5, 0.0]]}}
+  - {id: logo, kind: image, image: logo, fit: contain, box: [0.14, 0.145, 0.72, 0.12],
+     tracks: {opacity: [[0.5, 0.0], [0.6, 1.0]]}}
+  - {id: cta, kind: button, text: cta, font: display, weight: 700, colour: cta_text, fill: cta, size: 0.044,
+     line_height: 1.1, max_lines: 1, radius: 0.5, box: [0.22, 0.555, 0.56, 0.08],
+     tracks: {opacity: [[0.5, 0.0], [0.6, 1.0]]}}

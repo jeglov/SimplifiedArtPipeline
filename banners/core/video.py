@@ -3,9 +3,10 @@
 The encoder settings come from conventions/banners.yaml `encode`. Two
 probed facts shape them (docs/banners.md):
 
-* x264 is byte-deterministic for a FIXED thread count, and `-threads 0`
-  (one per core) gives other bytes than `-threads 1`. So the count is pinned:
-  a banner encoded on an 8-core and a 16-core machine must be the same file.
+* x264's bytes depend on the thread count (`-threads 0`, one per core,
+  differs from `-threads 1`), and with VBV rate control (CBR) more than one
+  thread is not deterministic at all: 4 threads gave 3 different files from
+  the same frames. So the count is pinned, to 1.
 * A static frame in quality mode (CRF 20) came out at 150 kbps, under
   TikTok's 516 kbps floor. So the encoder runs constant bitrate (CBR with
   HRD filler): the floor holds whatever the content.
