@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "artpipe": {
+      "type": "stdio",
+      "command": "cmd",
+      "args": ["/d", "/c", "artpipe.cmd", "agent", "serve"],
+      "env": {}
+    }
+  }
+}

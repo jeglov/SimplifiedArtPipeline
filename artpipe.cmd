@@ -17,6 +17,7 @@ rem   artpipe gen model CONCEPT_RUN --class C [--seed N] [--repair]   image to l
 rem   artpipe gen ingest MODEL_RUN --class C --name N   GLB to a Maya scene + textures
 rem   artpipe texture FILE... [--class C]  texture rules in Python, before Unity (validate\texture_cli.py)
 rem   artpipe banners setup^|status        pinned renderer tools for UA creatives (banners\cli.py)
+rem   artpipe agent setup^|status^|serve    the MCP server for agents (agent\cli.py, agent\server.py)
 rem   artpipe py [ARGS]                raw mayapy, e.g. "artpipe py -m pip list"
 rem
 rem mayapy comes from %MAYAPY% if set, otherwise the newest installed
@@ -27,6 +28,11 @@ rem Limit of batch files: an argument can't span several lines (e.g. a multi-lin
 rem "py -c" script). Write the script to a .py file, or call mayapy directly.
 
 setlocal
+rem An MCP client starts the server with a minimal environment (probed: the
+rem MCP SDK passes about 12 variables, not ProgramFiles or COMSPEC), and the
+rem server runs artpipe.cmd for every tool. Fall back to the defaults.
+if not defined ProgramFiles set "ProgramFiles=%SystemDrive%\Program Files"
+if not defined COMSPEC set "COMSPEC=%SystemRoot%\System32\cmd.exe"
 if not defined MAYAPY (
     for /d %%D in ("%ProgramFiles%\Autodesk\Maya20*") do (
         if exist "%%D\bin\mayapy.exe" set "MAYAPY=%%D\bin\mayapy.exe"
@@ -47,6 +53,7 @@ set "PYTHONPATH=%ROOT%;%PYTHONPATH%"
 set "CMD=%~1"
 if "%CMD%"=="" goto usage
 shift
+set "SUB=%~1"
 
 rem Collect the remaining arguments (shift does not change %*).
 set "ARGS="
@@ -68,13 +75,26 @@ if /i "%CMD%"=="unity" "%MAYAPY%" -m pipeline.unity %ARGS% & goto done
 if /i "%CMD%"=="gen" "%MAYAPY%" -m gen.cli %ARGS% & goto done
 if /i "%CMD%"=="texture" "%MAYAPY%" -m validate.texture_cli %ARGS% & goto done
 if /i "%CMD%"=="banners" "%MAYAPY%" -m banners.cli %ARGS% & goto done
+if /i "%CMD%"=="agent" if /i "%SUB%"=="serve" goto agent_serve
+if /i "%CMD%"=="agent" "%MAYAPY%" -m agent.cli %ARGS% & goto done
 if /i "%CMD%"=="test" "%MAYAPY%" -m pytest -q "%ROOT%\tests" %ARGS% & goto done
 if /i "%CMD%"=="py" "%MAYAPY%" %ARGS% & goto done
 echo artpipe: unknown command "%CMD%" 1>&2
 
 :usage
-echo usage: artpipe build^|generate^|gen^|texture^|banners^|validate^|fixtures^|unity-fixtures^|test^|docs^|conventions^|unity^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
+echo usage: artpipe build^|generate^|gen^|texture^|banners^|agent^|validate^|fixtures^|unity-fixtures^|test^|docs^|conventions^|unity^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
 exit /b 2
+
+:agent_serve
+rem The MCP server runs in its own venv (Python 3.12, `artpipe agent setup`), not
+rem under mayapy. stdout is the protocol: nothing else may print to it.
+set "AGENT_TOOLS=%ARTPIPE_TOOLS%"
+if not defined AGENT_TOOLS set "AGENT_TOOLS=%LOCALAPPDATA%\artpipe"
+if not exist "%AGENT_TOOLS%\agent-venv\Scripts\python.exe" (
+    echo artpipe: the agent venv is missing: run "artpipe agent setup" 1>&2
+    exit /b 2
+)
+"%AGENT_TOOLS%\agent-venv\Scripts\python.exe" -m agent.server & goto done
 
 :done
 exit /b %ERRORLEVEL%

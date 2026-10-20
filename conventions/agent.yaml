@@ -1,0 +1,23 @@
+# The MCP agent layer (Phase 5): the server an agent (Claude Code, later
+# Sophia) calls artpipe through.
+#
+# Read by agent/core/rules.py, under mayapy (setup, the job runner) and under
+# the server's own Python (the server). The server is a thin front end: every
+# tool runs an artpipe command, so the pipeline's logic stays in the tested
+# Python 3.9 code and the agent sees exactly what a human at the CLI sees.
+version: 1
+
+# The server's interpreter. The official MCP SDK needs Python >= 3.10;
+# mayapy is 3.9, so the server gets its own venv, built by
+# `artpipe agent setup` from the py launcher's 3.12 and agent/requirements.lock
+# (exact versions + sha256, installed with --require-hashes --no-deps).
+python: "3.12"
+venv: agent-venv              # under %ARTPIPE_TOOLS% (default %LOCALAPPDATA%\artpipe)
+mcp_version: "2.2.0"          # must match the lock (checked by setup and a test)
+lock: agent/requirements.lock
+
+server:
+  name: artpipe
+  # A tool that returns its answer directly must answer within this; anything
+  # longer (a render, a generation, a batch) is a job (step 5.2).
+  call_timeout_s: 120

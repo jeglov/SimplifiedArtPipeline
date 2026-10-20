@@ -19,6 +19,7 @@ markers = [
     "unity: boots the real Unity Editor in batchmode (slow); skipped if Unity is missing",
     "comfy: starts the real ComfyUI server headless; skipped if ComfyUI is missing",
     "render: runs the pinned Chromium and ffmpeg (banners); skipped if `artpipe banners setup` has not run",
+    "agent: runs the real MCP server in the agent venv; skipped if `artpipe agent setup` has not run",
 ]
 # Maya 2023 ships the old `future`/`past` packages, which warn on import. Not ours.
 filterwarnings = ["ignore::DeprecationWarning:past.*"]
