@@ -34,6 +34,7 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 41 | P5 | `verify` reports FBX and textures, but not orphans: a sidecar whose FBX was deleted, or a `.meta` left behind | Stale files confuse the next agent run | Report orphan sidecars and metas as warnings in verify mode |
 | 42 | P5 | The CLI has no `remove` command: deleting an asset is a manual step | An agent replacing an asset under a new name leaves the old one behind | `artpipe unity remove PATH...` through AssetDatabase.DeleteAsset, with references checked first |
 | 43 | P3 | `topology.inverted` measures winding per mesh (total signed volume), not per shell or per face | One flipped shell or a few flipped faces in a combined mesh can leave the total volume positive and pass. Common after a bad mirror or combine, and in image-to-3D output | Check winding consistency per edge: on a manifold edge the two faces must run in opposite directions. Report the minority faces of each shell |
+| 44 | P5 | ComfyUI progress isn't streamed: the harness polls `/history` until the run ends | An agent or a human watching a long image-to-3D run sees nothing until it finishes | The websocket (`/ws?clientId=`) sends per-node progress. Add it when the MCP layer can show progress; polling stays the fallback (stdlib only) |
 
 ## Done
 

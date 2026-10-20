@@ -9,7 +9,10 @@
 ## Roadmap
 1. Conventions + Maya validators (done)
 2. Unity import pipeline (done)
-3. **AI generation stage** (ComfyUI, image→3D) ← next phase, deliverables not defined yet: agree them with the user first
+3. **AI generation stage** (ComfyUI, image→3D) ← **current phase** (agreed 2026-10-20)
+   - Decisions: local only, no paid API. Image model **Z-Image-Turbo fp8** (Apache 2.0). Image→3D **TRELLIS.2** native in ComfyUI (MIT), with the 8 GB VRAM fit probed first and Comfy Cloud as the fallback. Hunyuan3D is ruled out (its licence excludes the EU/UK). Target classes: `pickup`, `prop_small`. ComfyUI runs headless and pinned (auto-update off, bundled Python 3.13 on 127.0.0.1, started by the pipeline). Texel density (#13): build it as a warning, measure on generated assets, then pin per-class targets. Skinning (#12) stays deferred.
+   - Steps: 3.1 pin + probe ComfyUI API (docs/generation.md) · 3.2 generation harness + provenance manifest · 3.3 concept image + style template + image pre-checks (#40) · 3.4 image→3D (VRAM and output-format probe) · 3.5 Maya ingest: GLB reader, unit/axis (#4), decimate to budget, texture resize, per-shell winding (#43), texel density (#13) · 3.6 bounded repair loop (policy in conventions/) · 3.7 `artpipe generate` end to end, provenance in the build report · 3.8 tests (recorded generator outputs as fixtures) + docs
+   - Generation never writes into the Unity project: generated assets go through the same validate → export → gate path. The model is the only nondeterministic step: record GPU/driver/torch/ComfyUI/model hashes, and keep everything downstream deterministic.
 4. Animated store banners at scale (one template → many games)
 5. MCP agent layer + docs + demo video
 
