@@ -102,3 +102,61 @@ should be too (same pinned exes, software raster, fixed thread count), but
 that isn't proven yet (backlog #61). The checks never rely on it: they read
 the layout record and **decoded** frames, not file hashes. Reuse of earlier
 outputs is keyed by the inputs' hash, not by the output's.
+
+## Template, kits and licences (step 4.3)
+
+**The template** (`banners/templates/hero_endcard.yaml`, read by
+`banners/core/template.py`) is layers (image, text, button) with boxes as
+shares of the frame, keyframe tracks, and the slots a kit must fill. It
+never names a colour value, a font file or a string. The strict reader
+refuses an undeclared slot, a declared slot no layer uses (it caught one in
+the first draft: `colour.background`), keys out of order, a text, logo or
+CTA box outside the frame, an unknown easing.
+
+**A kit** (`banners/kits/<game>/kit.yaml`, `banners/core/kit.py`) is one
+game: palette, which palette colour fills each colour slot, font ids from
+`banners/fonts/fonts.yaml`, images, strings per locale. A malformed kit is a
+tool error (exit 2); whether its content is usable is judged by checks
+(exit 1), so an agent gets a report it can act on:
+
+| Check | Severity | Fails when |
+|---|---|---|
+| `kit.slots` | error | a template slot has no value (whitespace counts as empty), in any locale asked for; a colour slot names no palette entry; a font id isn't registered |
+| `kit.files` | error | a file is missing, has no provenance record, or its sha256 differs from the record |
+| `kit.licences` | error | a font or image licence isn't in `licences.allowed`; a font's licence text is missing; a generated image names a model whose licence isn't in `licences.generator_models` |
+| `kit.colours` | error | a palette value isn't `#RRGGBB` (the contrast checks compute luminance from these) |
+| `kit.images` | warning | not a PNG; an image on a `contain` layer has no alpha (drawn as a rectangle); an image is drawn above `checks.max_upscale` (1.5x) in any placement, including the layer's largest animated scale |
+
+**Licences.** No asset without a record. Fonts: one record per file in
+`fonts.yaml` (Fredoka and Noto Sans, OFL-1.1, from google/fonts at a pinned
+commit, licence text next to each file). Images: every kit image has a
+sidecar `<file>.provenance.json` (`conventions/banner_provenance.schema.json`)
+with its sha256, how it was made, from what, and every model with its
+licence. kit.yaml only names the file and the licence id, so remaking art
+never means editing kit.yaml.
+
+**Kit art** (`artpipe banners art`, `banners/art.py`), the AI part kept simple:
+
+* `hero`: the cut-out of a passing Phase 3 concept with its BiRefNet mask,
+  so the banner hero is the object the game's 3D asset was built from.
+  Alpha goes through a 16-240 ramp, and edge pixels are decontaminated: an
+  edge is I = a C + (1 - a) B, so solving for C with B = the backdrop colour
+  (median of the image border) removes the grey halo the studio backdrop
+  would leave on a green background. A boundary test caught an off-by-one:
+  a mask value exactly at the ramp's low end has alpha 0 but was counted
+  into the crop.
+* `background`: one Z-Image-Turbo image per game on the pinned ComfyUI
+  (the concept workflow at 864x1536, its mask ignored), cached in the kit.
+  864 px is drawn at 1.40x in the 1080 px frame with the 1.12x push-in:
+  under the 1.5x limit.
+* `logo`: `logo.html` (a wordmark set in Fredoka; the OFL allows logos)
+  rendered by the pinned Chromium with a transparent background and cropped
+  to its alpha. Re-rendering gives the committed file byte for byte.
+  **AI never makes text or logos**: diffusion models garble letters, and a
+  generated logo has no trademark certainty.
+
+Records never hold machine paths: a run outside the repo is recorded as
+`<outside-repo>/<name>`; the schema refuses absolute paths (it caught this
+on the first test run).
+
+The demo game is **Spotcap Grove**, a made-up casual merge game.

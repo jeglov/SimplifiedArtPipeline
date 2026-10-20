@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- Spotcap Grove wordmark (fictional game). Source of logo.png:
+     `artpipe banners art logo spotcap_grove` renders this page with the pinned
+     Chromium, transparent background, at 1400x440. Fredoka is OFL-1.1, which
+     allows using it in a logo. Own work, so licence own-work. -->
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: "Fredoka"; src: url("fonts/display.ttf"); font-weight: 300 700; }
+html, body { margin: 0; width: 1400px; height: 440px; overflow: hidden; background: transparent; }
+#mark { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#word { font: 700 230px/0.95 "Fredoka"; color: #FFF6E0; letter-spacing: -2px;
+        -webkit-text-stroke: 22px #7A1E14; paint-order: stroke fill;
+        filter: drop-shadow(0 12px 0 #4A0F0A); }
+#word .dot { color: #E8402F; }
+#sub { margin-top: 2px; font: 700 92px/1 "Fredoka"; letter-spacing: 26px; padding-left: 26px; color: #FFD34D;
+       -webkit-text-stroke: 14px #2F5A1A; paint-order: stroke fill; filter: drop-shadow(0 8px 0 #1F3D10); }
+</style></head>
+<body><div id="mark"><div id="word">Sp<span class="dot">o</span>tcap</div><div id="sub">GROVE</div></div>
+<script>
+window.artpipe = {
+  ready() { return { text: ["word", "sub"] }; },
+  apply(n) { const r = document.getElementById("mark").getBoundingClientRect(); return { mark: [r.left, r.top, r.right, r.bottom] }; },
+  hideText(on) {},
+};
+</script></body></html>

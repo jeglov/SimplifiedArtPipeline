@@ -1,0 +1,50 @@
+{
+  "from": {
+    "image_sha256": "bf0274af27c440a77e16b25d06a55e7968e7af48bfcbb739ecfb306059b582d3",
+    "mask_sha256": "b63d1ab22e3ae1a304438e3da879c963754a1b844a753aa2e547e1e56ecae72e",
+    "prompt": "a red toadstool mushroom with white spots. Stylized 3D game asset, chunky simple shapes, smooth toon shading, bright saturated colours, clean readable silhouette. A collectible game pickup item. Single isolated object, the whole object fully visible and centred with empty space around it, three-quarter view from slightly above, plain solid light grey studio background, soft even lighting, no cast shadow, no text, no logo, no other objects.",
+    "run": "out/gen/runs/concept_zimage-e2927d8cdc45",
+    "run_id": "concept_zimage-e2927d8cdc45",
+    "seed": 1
+  },
+  "kind": "cutout",
+  "licence": "generated",
+  "models": [
+    {
+      "id": "birefnet",
+      "licence": "MIT",
+      "sha256": "9ab37426bf4de0567af6b5d21b16151357149139362e6e8992021b8ce356a154"
+    },
+    {
+      "id": "qwen3_4b_fp8",
+      "licence": "Apache-2.0",
+      "sha256": "72450b19758172c5a7273cf7de729d1c17e7f434a104a00167624cba94f68f15"
+    },
+    {
+      "id": "z_image_turbo_int8",
+      "licence": "Apache-2.0",
+      "sha256": "be517ebd47c912a5626a588e1aeea43e6be4a43c0cdcd2b48a2a780d9f358635"
+    },
+    {
+      "id": "z_image_vae",
+      "licence": "Apache-2.0",
+      "sha256": "afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38"
+    }
+  ],
+  "output": "hero.png",
+  "output_sha256": "97834b5565b8e0ff3987502acb5859064cdbf3c887e4b093790aa9f4900dcde4",
+  "schema_version": "1.0",
+  "settings": {
+    "alpha_ramp": [
+      16,
+      240
+    ],
+    "margin": 0.03
+  },
+  "size": [
+    628,
+    681
+  ],
+  "slot": "hero",
+  "tool": "artpipe.banners.art"
+}

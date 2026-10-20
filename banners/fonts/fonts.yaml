@@ -1,0 +1,29 @@
+# Fonts a game kit may use: one licence record per font file.
+#
+# Kits name a font by id (banners/kits/<game>/kit.yaml `fonts`). A font is
+# usable only if its file matches the sha256 here and its licence is in
+# conventions/banners.yaml `licences.allowed`. All from google/fonts at
+# commit 01d5d9f05246fb7090a8403b81257535cb1a088b (2026-09-28), renamed
+# from the variable-font names (Family[wdth,wght].ttf) so they work in URLs.
+# The OFL lets us bundle, embed and render them; the licence text ships next
+# to each file, as the OFL asks.
+version: 1
+fonts:
+  fredoka:
+    family: Fredoka
+    file: fredoka/Fredoka.ttf
+    sha256: 2ba02e68b152868aef9ba28e24b3648c7d457fe6f25c761f2c2c53fb61a73fc8
+    weights: [300, 700]     # variable wght axis
+    # Latin and Hebrew only: no Cyrillic, Greek or CJK (probed: Cyrillic falls back to Times New Roman).
+    licence: OFL-1.1
+    licence_file: fredoka/OFL.txt
+    source: https://github.com/google/fonts/tree/01d5d9f05246fb7090a8403b81257535cb1a088b/ofl/fredoka
+  noto_sans:
+    family: Noto Sans
+    file: notosans/NotoSans.ttf
+    sha256: bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d
+    weights: [100, 900]
+    # Latin, Greek, Cyrillic. CJK needs Noto Sans JP/SC/KR (separate files).
+    licence: OFL-1.1
+    licence_file: notosans/OFL.txt
+    source: https://github.com/google/fonts/tree/01d5d9f05246fb7090a8403b81257535cb1a088b/ofl/notosans

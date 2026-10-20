@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://artpipe.local/conventions/banner_provenance.schema.json",
+  "title": "Kit image provenance (banners/art.py)",
+  "description": "Sidecar <image>.provenance.json next to every kit image: what the file is (sha256), how it was made, from what, and the models with their licences.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tool", "slot", "output", "output_sha256", "kind", "licence", "models", "from"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "tool": {"const": "artpipe.banners.art"},
+    "slot": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "output": {"type": "string", "pattern": "^[^/\\\\]+\\.png$"},
+    "output_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "kind": {"enum": ["cutout", "generated", "rendered"]},
+    "licence": {"type": "string", "minLength": 1},
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "sha256", "licence"],
+        "properties": {
+          "id": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "licence": {"type": "string"}
+        }
+      }
+    },
+    "from": {
+      "type": "object",
+      "description": "The inputs: a ComfyUI run (run_id, prompt, seed, input hashes) or a source page (source, source_sha256, fonts, chromium). Paths are repo-relative.",
+      "properties": {
+        "run": {"type": "string", "not": {"pattern": "^([A-Za-z]:|/|\\\\)"}},
+        "source": {"type": "string", "not": {"pattern": "^([A-Za-z]:|/|\\\\)"}}
+      }
+    },
+    "settings": {"type": "object"},
+    "size": {"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 2, "maxItems": 2}
+  }
+}

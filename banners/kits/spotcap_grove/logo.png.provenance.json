@@ -1,0 +1,26 @@
+{
+  "from": {
+    "chromium": "153.0.8010.12",
+    "fonts": [
+      {
+        "id": "fredoka",
+        "licence": "OFL-1.1",
+        "sha256": "2ba02e68b152868aef9ba28e24b3648c7d457fe6f25c761f2c2c53fb61a73fc8"
+      }
+    ],
+    "source": "banners/kits/spotcap_grove/logo.html",
+    "source_sha256": "88519860ddb155b7ab8a814bda4946f9f3d38c362e407404b2c9273213701b89"
+  },
+  "kind": "rendered",
+  "licence": "own-work",
+  "models": [],
+  "output": "logo.png",
+  "output_sha256": "d3eceebdf543e13b2e70bf192ba7c143ddfa5900177804eae05e3b5f55df0554",
+  "schema_version": "1.0",
+  "size": [
+    855,
+    308
+  ],
+  "slot": "logo",
+  "tool": "artpipe.banners.art"
+}

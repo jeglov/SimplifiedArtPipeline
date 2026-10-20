@@ -64,6 +64,25 @@ encode:
   bufsize_kbps: 10000
   keyint_s: 2.0
 
+# Licences a kit asset may carry (banners/core/checks/kit_licences.py). No
+# asset ships without one: fonts, images, and later music (backlog #58).
+licences:
+  allowed:
+    - OFL-1.1       # SIL Open Font License: fonts may be bundled, embedded, used in logos
+    - CC0-1.0       # public domain dedication
+    - own-work      # made for this project (e.g. a wordmark set in an OFL font)
+    - generated     # AI output: needs a provenance sidecar naming the models
+  # A generated image is only shippable if every model that made it has one of
+  # these licences (all Phase 3 models: generation.yaml). Apache-2.0 and MIT
+  # put no restriction on outputs.
+  generator_models: [Apache-2.0, MIT]
+
+# House rules for the checks: no network publishes these.
+checks:
+  # kit.images: largest factor an image is drawn at (box size x animated
+  # scale). Above it a layer looks soft on a phone held at arm's length.
+  max_upscale: 1.5
+
 # Placements: one per output format. Sources read 2026-10-20:
 #   meta    https://www.facebook.com/business/ads-guide/update/video/instagram-reels
 #   tiktok  https://ads.tiktok.com/help/article/tiktok-auction-in-feed-ads

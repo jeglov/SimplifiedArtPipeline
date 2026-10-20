@@ -1,0 +1,45 @@
+# Spotcap Grove: a FICTIONAL casual merge game, made up for the artpipe demo.
+# No real title, brand or studio is named or imitated.
+#
+# Images are made by `artpipe banners art` and each has a provenance sidecar
+# (<file>.provenance.json) with its sha256, sources, models and licences.
+version: 1
+game:
+  id: spotcap_grove
+  name: Spotcap Grove
+  fictional: true
+
+# The game's colours. Colour slots point at palette names, so the repair
+# step can swap a slot to another brand colour, never to a made-up one.
+palette:
+  forest: "#1F4D2B"
+  moss: "#3E7B3A"
+  cream: "#FFF6E0"
+  cap_red: "#E8402F"
+  gold: "#FFC93C"
+  bark: "#4A2A14"
+  night: "#0E2416"
+
+colours:
+  text: cream
+  text_shadow: night
+  cta: gold
+  cta_text: bark
+
+fonts:
+  display: fredoka
+  body: noto_sans
+
+images:
+  # Z-Image-Turbo, generated once for this game (art background).
+  background: {file: background.png, licence: generated}
+  # The Phase 3 concept the game's 3D Mushroom was made from, cut out with its mask (art hero).
+  hero: {file: hero.png, licence: generated}
+  # Wordmark set in Fredoka from logo.html (art logo). Own work.
+  logo: {file: logo.png, licence: own-work}
+
+strings:
+  en:
+    headline: Merge mushrooms, grow a magic grove!
+    subline: Hundreds of cosy merge puzzles
+    cta: Play now

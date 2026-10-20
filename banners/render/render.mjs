@@ -16,7 +16,8 @@
 //   }
 //
 // The page provides window.artpipe:
-//   ready()        -> {text: [element ids of text layers], ...}   after fonts and images load
+//   ready()        -> {text: [ids] or {name: CSS selector}, ...}   after fonts and images load;
+//                     each names the element that directly holds a text (CDP counts a node's own text only)
 //   apply(n)       -> the layout of frame n (any JSON), after setting every layer's state
 //   hideText(on)   hides / shows the text layers (the background pass for contrast checks)
 //
@@ -92,9 +93,10 @@ try {
   await cdp.send("DOM.enable");
   await cdp.send("CSS.enable");
   const { root } = await cdp.send("DOM.getDocument", { depth: -1 });
-  for (const id of ready.text || []) {
-    const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector: "#" + id });
-    if (!nodeId) fail("text layer #" + id + " is not in the page");
+  const textNodes = Array.isArray(ready.text) ? Object.fromEntries((ready.text).map((id) => [id, "#" + id])) : (ready.text || {});
+  for (const [id, selector] of Object.entries(textNodes)) {
+    const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector });
+    if (!nodeId) fail("text " + selector + " is not in the page");
     fonts[id] = (await cdp.send("CSS.getPlatformFontsForNode", { nodeId })).fonts
       .map((f) => ({ family: f.familyName, postscript: f.postScriptName, custom: f.isCustomFont, glyphs: f.glyphCount }));
   }

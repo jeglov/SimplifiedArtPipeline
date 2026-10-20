@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from banners.core.video import EncodeRules
 from validate.core.conventions import DEFAULT_DIR, ConventionError, _read_yaml, _Reader
@@ -76,11 +76,25 @@ class Placement:
 
 
 @dataclass(frozen=True)
+class LicenceRules:
+    allowed: Tuple[str, ...]              # licence ids a kit asset may carry
+    generator_models: Tuple[str, ...]     # model licences whose outputs we may ship
+
+
+@dataclass(frozen=True)
+class CheckRules:
+    """House rules for the kit and banner checks (no network publishes these)."""
+    max_upscale: float
+
+
+@dataclass(frozen=True)
 class BannerRules:
     ffmpeg: ToolPin
     chromium: ToolPin
     playwright: PlaywrightPin
     encode: EncodeRules
+    licences: LicenceRules
+    checks: CheckRules
     placements: Dict[str, Placement]
 
     def placement(self, pid: str) -> Placement:
@@ -179,6 +193,28 @@ def _encode(r: _Reader) -> EncodeRules:
     return enc
 
 
+def _ids(r: _Reader, key: str) -> Tuple[str, ...]:
+    vals = r.get(key, list)
+    if not vals or not all(isinstance(v, str) and v for v in vals) or len(set(vals)) != len(vals):
+        raise ConventionError("%s.%s: a non-empty list of unique names" % (r.where, key))
+    return tuple(vals)
+
+
+def _licences(r: _Reader) -> LicenceRules:
+    lic = LicenceRules(_ids(r, "allowed"), _ids(r, "generator_models"))
+    r.done()
+    return lic
+
+
+def _checks(r: _Reader) -> CheckRules:
+    up = r.get("max_upscale", float)
+    if up < 1.0:
+        raise ConventionError("%s.max_upscale: must be >= 1.0, got %s" % (r.where, up))
+    c = CheckRules(up)
+    r.done()
+    return c
+
+
 def parse(data: dict) -> BannerRules:
     root = _Reader(data, FILE)
     root.get("version", int)
@@ -188,6 +224,8 @@ def parse(data: dict) -> BannerRules:
     playwright = _playwright(tools.sub("playwright"))
     tools.done()
     encode = _encode(root.sub("encode"))
+    licences = _licences(root.sub("licences"))
+    checks = _checks(root.sub("checks"))
     placements = {}
     for pid, raw in sorted(root.get("placements", dict).items()):
         if not _ID.match(str(pid)):
@@ -199,7 +237,7 @@ def parse(data: dict) -> BannerRules:
     if not placements:
         raise ConventionError("%s: define at least one placement" % FILE)
     root.done()
-    return BannerRules(ffmpeg, chromium, playwright, encode, placements)
+    return BannerRules(ffmpeg, chromium, playwright, encode, licences, checks, placements)
 
 
 def load(conventions_dir: Optional[Path] = None) -> BannerRules:
