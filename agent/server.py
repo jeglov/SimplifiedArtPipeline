@@ -23,6 +23,7 @@ from typing import Any, Dict
 from mcp.server.mcpserver import MCPServer
 
 from agent.core import commands
+from agent.core import jobs
 from agent.core import rules as agent_rules
 
 ROOT = commands.ROOT
@@ -32,6 +33,8 @@ INSTRUCTIONS = """\
 artpipe: an art pipeline for mobile games (Maya -> Unity assets, AI generation, UA video creatives).
 Every tool runs one artpipe command and returns {exit_code, meaning, ...}: 0 pass, 1 the asset failed its
 checks or was handed over (read the report: it says what to fix), 2 the tool broke (retry or tell a human).
+Long tools (renders, generations, batches) return a job id at once: poll job_status (it shows progress and
+the queue position; GPU jobs run one at a time), then read job_result. Jobs survive a server restart.
 Rules live in conventions/ (read them with the info tool); never guess a budget or a spec.
 """
 
@@ -70,6 +73,73 @@ def artpipe_info() -> Dict[str, Any]:
         "conventions": conventions,
         "banner_tools": {"exit_code": banners.exit_code, "status": _json_or_text(banners.stdout)},
     }
+
+
+# --- jobs (step 5.2) ------------------------------------------------------------------
+
+JOB_TIMEOUT_S = {"cpu": 3 * 3600, "gpu": 3 * 3600}
+
+
+def _start(tool: str, args, resource: str = "cpu", meta=None) -> Dict[str, Any]:
+    rec = jobs.start(tool, args, resource, JOB_TIMEOUT_S[resource], meta)
+    return {"job_id": rec["id"], "state": rec["state"], "resource": resource,
+            "command": "artpipe " + " ".join(rec["args"]),
+            "next": "poll job_status(job_id) until the state is done, then job_result(job_id)"}
+
+
+def _gpu_progress(job_id: str):
+    rec = jobs.read(job_id)
+    if rec["resource"] != "gpu" or rec["state"] != "running":
+        return None
+    from gen import comfy                      # stdlib-only module: importable here
+    return comfy.progress(since=int(rec.get("comfy_log_offset") or 0))
+
+
+@server.tool(description="State of a job: queued (with its queue position), running (with the log tail and, "
+                         "for GPU jobs, ComfyUI's step progress), done (exit code and meaning), cancelled or lost.")
+def job_status(job_id: str) -> Dict[str, Any]:
+    out = jobs.status(job_id)
+    prog = _gpu_progress(job_id)
+    if prog:
+        out["comfy_progress"] = prog
+    return out
+
+
+@server.tool(description="A finished job's exit code, meaning and full output (capped). Before it finishes, "
+                         "the same as job_status.")
+def job_result(job_id: str) -> Dict[str, Any]:
+    return jobs.result(job_id)
+
+
+@server.tool(description="Cancel a queued or running job; its command and every process under it are killed.")
+def job_cancel(job_id: str) -> Dict[str, Any]:
+    return jobs.cancel(job_id)
+
+
+@server.tool(description="Every job with its state, newest last. state filters (queued, running, done, "
+                         "cancelled, lost).")
+def job_list(state: str = "") -> Dict[str, Any]:
+    rows = [{k: r[k] for k in ("id", "tool", "state", "resource", "created", "exit_code", "meaning")}
+            for r in jobs.list_jobs() if not state or r["state"] == state]
+    return {"jobs": rows, "count": len(rows)}
+
+
+@server.tool(description="Render one UA banner (template x kit x placement x locale), check it, and with "
+                         "repair=True fix and re-render it per conventions/banners.yaml. A job (~2-5 min). "
+                         "Result: exit 0 pass / 1 handed over (repair.json says why) / 2 tool error; the banner "
+                         "folder is out/banners/<kit>/<template>/<placement>/<locale>/.")
+def banners_render(kit: str, template: str, placement: str = "ua_video_9x16", locale: str = "en",
+                   repair: bool = True) -> Dict[str, Any]:
+    args = ["banners", "render", kit, "--template", template, "--placement", placement, "--locale", locale]
+    return _start("banners_render", args + (["--repair"] if repair else []))
+
+
+@server.tool(description="Generate a concept image for an asset on the pinned ComfyUI and check it for "
+                         "image-to-3D (artpipe gen concept). A GPU job: queued behind other GPU jobs. "
+                         "style is an id from conventions/gen_styles.yaml, asset_class from mesh_budgets.yaml.")
+def gen_concept(subject: str, asset_class: str, style: str, seed: int = 0, repair: bool = True) -> Dict[str, Any]:
+    args = ["gen", "concept", subject, "--class", asset_class, "--style", style, "--seed", str(seed)]
+    return _start("gen_concept", args + (["--repair"] if repair else []), resource="gpu")
 
 
 def main() -> None:

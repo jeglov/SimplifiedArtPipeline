@@ -87,6 +87,7 @@ class Fakes:
         monkeypatch.setattr(g.gen, "ingest", ingest)
         monkeypatch.setattr(g.bld, "build", build)
         self.stops = []
+        monkeypatch.setattr(g.comfy, "WORK", self.runs.parent / "comfy")   # not the real server's state
         monkeypatch.setattr(g.comfy.Client, "stats", lambda c: None)
         monkeypatch.setattr(g.comfy, "stop", lambda *a, **k: self.stops.append(1))
         return self
@@ -124,7 +125,9 @@ def test_full_chain_carries_provenance_into_the_build_report(monkeypatch, tmp_pa
 def test_the_server_stays_up_from_concept_to_model_and_is_stopped_once(monkeypatch, tmp_path):
     f = Fakes(tmp_path).install(monkeypatch)
     run(tmp_path, f)
-    assert [c[2] for c in f.calls if c[0] in ("concept", "model")] == [True, True]
+    # The stages don't keep the server themselves (keep_server False): the generate
+    # session's registration holds it up between them, and its exit stops it once (#45).
+    assert [c[2] for c in f.calls if c[0] in ("concept", "model")] == [False, False]
     assert f.stops == [1]
 
 

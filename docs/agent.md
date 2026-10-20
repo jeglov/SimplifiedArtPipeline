@@ -54,3 +54,70 @@ Tests: `tests/test_agent_core.py` (rules, the argument filter, a real
 command, the timeout killing the tree) and `tests/test_agent_server.py`
 (marker `agent`: the real server over stdio from the SDK's client, minimal
 environment included; removing the `ProgramFiles` fallback turns it red).
+
+## Jobs, the GPU queue, ComfyUI sharing (step 5.2)
+
+A tool that would outlast a call (a render, a generation, a batch) starts a
+**job** and returns its id at once. The agent then calls `job_status`
+(state, queue position, log tail, and for GPU jobs ComfyUI's step
+progress), `job_result` (exit code, meaning, full output) or `job_cancel`;
+`job_list` shows them all. Tools so far: `banners_render`, `gen_concept`
+(step 5.5 adds the rest).
+
+```
+out/agent/jobs/<job_id>/job.json     state machine (conventions/agent_job.schema.json)
+                        spawn.json   how the runner was started and its pid (written by the starter)
+                        runner.pid   the runner's own pid (written by the runner)
+                        stdout.log / stderr.log   the command's live output
+```
+
+States: `queued` → `running` → `done` (the command exited; its exit code
+keeps the 0 / 1 / 2 meaning) | `cancelled` | `lost` (the runner died, or a
+queued job never got one within 2 minutes). Each file has one writer, so the
+starter and the runner never overwrite each other.
+
+**The runner** (`artpipe agent job-run ID`, `agent/runner.py`) is a detached
+mayapy process: GPU jobs wait for the `gpu` lock (one at a time, first come
+first served), the command's output streams into the logs, the job's
+timeout kills the whole process tree, and the lock is released however the
+job ends. A runner killed outright leaves a stale lock (dead pid) that the
+next job takes over.
+
+**Locks** (`validate/core/locks.py`) are files holding the holder's pid,
+created with O_EXCL (of two racers exactly one wins); a dead holder's lock,
+or an empty one older than 10 s, is stale.
+
+**Sharing ComfyUI (backlog #45).** `gen.comfy.session()` replaces the
+start/stop pairs: it starts the server under a start lock, registers its
+user (`out/gen/comfy/users/`), and on exit stops the server only if no live
+user remains, it isn't kept (`gen server start`, `--keep-server`), and it is
+the pipeline's (started by this session, not running when it began, or
+recorded in `server.json` with a live pid). Repair loops and `artpipe
+generate` hold an outer session that registers without starting, so the
+server stays up between attempts and stops once at the end.
+
+**Progress (backlog #44).** Probed: ComfyUI's sampler and decoder bars are
+tqdm lines in its log, redrawn with `\r` (` 75%|#######5 | 6/8 [00:05<00:01,
+1.13it/s]`). `gen.comfy.progress()` reads the latest one, from the byte
+offset where the job started (so the previous job's 100 % isn't reported).
+No websocket client needed. Seen over MCP on a real concept job: 0/8 "Model
+Initializing", 1/8 ... 8/8, then done.
+
+Probed while building it:
+
+| Probe | Result |
+|---|---|
+| A detached runner started by the server, then the session closed | **the job came back `lost`**: the SDK's stdio client puts the server in a Windows Job Object with KILL_ON_JOB_CLOSE, and closing the session kills every member, detached or not |
+| The same with `CREATE_BREAKAWAY_FROM_JOB` | CreateProcess accepted the flag, the runner **still died** (nested jobs) |
+| The runner created by WMI (`Win32_Process.Create`) when the server is in a job (`IsProcessInJob`) | survives: started by one server process, followed to `done` by another. ~1 s to spawn; the WMI-created process gets the user's full environment |
+| `start()` writing job.json after spawning | with WMI's delay, a job already `running` was put back to `queued`: hence one writer per file |
+| Old `queued` records from broken runs | counted in the queue position forever; now `lost` after the grace and ignored by the queue |
+
+Tests: `tests/test_locks.py`, `tests/test_comfy_session.py` (nesting,
+another live user, a dead user's registration, kept servers, a server
+someone else runs, a raising block, the start-lock timeout, progress
+offsets), `tests/test_agent_jobs.py` (real detached runners: done, exit
+codes, timeout, cancel while running and while queued, FIFO without overlap,
+lost, stale lock, refused syntax, the schema), and over MCP
+(`tests/test_agent_server.py`: a render job that survives a server restart;
+under `comfy`, a GPU job's progress).

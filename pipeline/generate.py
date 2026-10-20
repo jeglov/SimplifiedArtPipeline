@@ -124,21 +124,17 @@ def generate(subject: str, asset_class: str, style: str, name: str,
     gen_rules.load_styles().prompt(subject, asset_class, style)  # unknown style or class: before the GPU
     repairs = runs.parent / "repairs"
     stages: Dict[str, Optional[Dict[str, Any]]] = {"concept": None, "model": None}
-    port = gen_rules.load().comfyui.port
-    was_up = comfy.Client(port).stats() is not None
-    try:
-        # The server stays up from concept to model: a cold start is ~15 s.
-        code, _, rec = gen.concept_repaired(subject, asset_class, style, concept_seed, runs, True, env)
+    # One server session from concept to model (a cold start is ~15 s); stopped
+    # at the end unless kept or still used by another process (#45).
+    with comfy.session(gen_rules.load().comfyui, env, keep_server=keep_server, ensure_running=False):
+        code, _, rec = gen.concept_repaired(subject, asset_class, style, concept_seed, runs, False, env)
         stages["concept"] = stage_record(rec, repairs)
         if code != 0:
             return stopped_report(asset_class, "concept", code, generation_block(subject, style, name, stages, None))
-        code, _, rec = gen.model_repaired(str(ROOT / rec["accepted_run"]), asset_class, model_seed, runs, True, env)
+        code, _, rec = gen.model_repaired(str(ROOT / rec["accepted_run"]), asset_class, model_seed, runs, False, env)
         stages["model"] = stage_record(rec, repairs)
         if code != 0:
             return stopped_report(asset_class, "model", code, generation_block(subject, style, name, stages, None))
-    finally:
-        if not was_up and not keep_server:
-            comfy.stop()
 
     try:
         _, _, asset_dir = gen.ingest(str(ROOT / rec["accepted_run"]), asset_class, name, out_dir=assets)

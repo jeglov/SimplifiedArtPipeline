@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://artpipe.local/conventions/agent_job.schema.json",
+  "title": "Agent job record (agent/core/jobs.py)",
+  "description": "out/agent/jobs/<id>/job.json: one long artpipe command run by a detached runner. Its pids live next to it (spawn.json from the starter, runner.pid from the runner), so each file has one writer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tool", "args", "resource", "timeout_s", "state", "created", "started", "finished", "exit_code", "meaning", "timed_out", "cancel_requested", "meta"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9-]+$"},
+    "tool": {"type": "string"},
+    "args": {"type": "array", "items": {"type": "string"}},
+    "resource": {"enum": ["cpu", "gpu"]},
+    "timeout_s": {"type": "integer", "minimum": 1},
+    "state": {"enum": ["queued", "running", "done", "cancelled", "lost"]},
+    "created": {"type": "string"},
+    "started": {"type": ["string", "null"]},
+    "finished": {"type": ["string", "null"]},
+    "exit_code": {"type": ["integer", "null"], "enum": [0, 1, 2, null]},
+    "meaning": {"type": ["string", "null"]},
+    "timed_out": {"type": "boolean"},
+    "cancel_requested": {"type": "boolean"},
+    "comfy_log_offset": {"type": "integer", "minimum": 0},
+    "meta": {"type": "object"}
+  }
+}

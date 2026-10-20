@@ -34,6 +34,7 @@ class FakeServer:
         self.started = self.stopped = self.queued = 0
 
     def install(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(cli.comfy, "WORK", tmp_path / "comfy")     # not the real server's state
         monkeypatch.setattr(cli.comfy, "start", self.start)
         monkeypatch.setattr(cli.comfy, "stop", self.stop)
         monkeypatch.setattr(cli.comfy, "queue", self.queue)

@@ -166,7 +166,7 @@ def background_repaired(kit_dir: Path, prompt: str, seed: int, width: int, heigh
     def attempt(s: int) -> "gen_repair.Outcome":
         try:
             code, message, run_dir = gen_cli.generate(BACKGROUND_WORKFLOW, _background_pairs(prompt, s, width, height),
-                                                      runs, keep_server=True)
+                                                      runs, keep_server=False)
         except ToolError as exc:
             return gen_repair.Outcome(2, message=str(exc))
         if code != 0:

@@ -14,6 +14,7 @@ something to share: two ComfyUIs would fight over the GPU.
 from __future__ import annotations
 
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -22,12 +23,15 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple
 
 from gen.core import ToolError
 from gen.core.manifest import git_head
 from gen.core.rules import ComfyRules
+from validate.core import locks
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "out" / "gen"
@@ -302,6 +306,127 @@ def stop(work: Path = WORK, port: Optional[int] = None) -> bool:
     return True
 
 
+# --- shared use (backlog #45) ------------------------------------------------------
+#
+# Several artpipe processes may need the server at once (an agent starting
+# jobs, a human at the prompt). Without coordination two of them both see
+# "no server", both start one (the second dies on the port), and the first
+# to finish stops the server under the other's running graph. A session:
+#   * starts the server under a lock (one process starts it, the others wait
+#     and then find it up),
+#   * registers its user (work/users/<token>.json with the pid),
+#   * on exit stops the server only if no live user is left, the server isn't
+#     kept (`gen server start`, or a session with keep_server=True), and it is
+#     the pipeline's: this session started it, it wasn't running when the
+#     session began, or server.json records it with a live pid (a server
+#     another user started and left: without this it would never stop). A
+#     server someone else runs (no record) is never ours to stop.
+# A user that died without unregistering is ignored (its pid is dead).
+# An outer session (a repair loop, `artpipe generate`) registers without
+# starting (ensure_running=False): the first graph starts the server, and the
+# outer registration keeps it up between attempts.
+
+def _users_dir(work: Path) -> Path:
+    return work / "users"
+
+
+def live_users(work: Path = WORK) -> List[Dict[str, Any]]:
+    out = []
+    d = _users_dir(work)
+    if d.is_dir():
+        for f in sorted(d.glob("*.json")):
+            try:
+                info = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if locks.pid_alive(info.get("pid")):
+                out.append(info)
+            else:
+                try:
+                    f.unlink()   # its process is gone
+                except OSError:
+                    pass
+    return out
+
+
+def kept(work: Path = WORK) -> bool:
+    try:
+        return bool(json.loads((work / "server.json").read_text(encoding="utf-8")).get("keep"))
+    except (OSError, ValueError):
+        return False
+
+
+def owned(work: Path = WORK) -> bool:
+    """The running server is one the pipeline started (recorded, its pid alive), not someone else's."""
+    try:
+        info = json.loads((work / "server.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return locks.pid_alive(info.get("pid"))
+
+
+def keep(work: Path = WORK) -> None:
+    """Mark the running server as kept: no session stops it (only `gen server stop`)."""
+    path = work / "server.json"
+    try:
+        info = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    info["keep"] = True
+    path.write_text(json.dumps(info) + "\n", encoding="utf-8")
+
+
+@contextmanager
+def session(rules: ComfyRules, env: Mapping[str, str] = os.environ, work: Optional[Path] = None,
+            keep_server: bool = False, ensure_running: bool = True) -> Iterator[bool]:
+    """Use the server for the duration of a with-block; yields True if this session started it.
+
+    On exit the server is stopped only if: this session didn't ask to keep it,
+    no other live user remains, it isn't marked kept, and it is the pipeline's
+    (this session started it, it wasn't running when the session began, or
+    server.json records it with a live pid).
+    """
+    explicit = work is not None
+    work = work if explicit else WORK      # resolved at call time (tests repoint WORK)
+
+    def start_fn():
+        return start(rules, env, work) if explicit else start(rules, env)
+
+    def stop_fn():
+        return stop(work) if explicit else stop()
+    token = "%d-%s" % (os.getpid(), uuid.uuid4().hex[:8])
+    lock = work / "start.lock"
+    if not locks.acquire(lock, token, rules.startup_timeout_s + 30):
+        raise ToolError("another artpipe process has been starting ComfyUI for over %d s (%s)"
+                        % (rules.startup_timeout_s + 30, lock))
+    try:
+        was_up = Client(rules.port).stats() is not None
+        started = start_fn() if ensure_running else False
+        _users_dir(work).mkdir(parents=True, exist_ok=True)
+        (_users_dir(work) / (token + ".json")).write_text(
+            json.dumps({"token": token, "pid": os.getpid(), "since": locks.now()}) + "\n", encoding="utf-8")
+        if keep_server:
+            keep(work)
+    finally:
+        locks.release(lock, token)
+    try:
+        yield started
+    finally:
+        try:
+            (_users_dir(work) / (token + ".json")).unlink()
+        except OSError:
+            pass
+        if locks.acquire(lock, token, rules.startup_timeout_s + 30):
+            try:
+                # owned(): a server the pipeline started and left running for another user,
+                # who has since finished or died, is cleaned up by the last user out.
+                if not keep_server and (started or not was_up or owned(work)) and not live_users(work) \
+                        and not kept(work):
+                    stop_fn()
+            finally:
+                locks.release(lock, token)
+
+
 # --- one graph --------------------------------------------------------------------
 
 def queue(client: Client, graph: Mapping[str, Any], client_id: str) -> Tuple[Optional[str], Any]:
@@ -329,3 +454,46 @@ def download(client: Client, query: Mapping[str, str]) -> bytes:
     if status != 200:
         raise ToolError("GET /view %s: HTTP %d" % (dict(query), status))
     return raw
+
+
+# --- progress (backlog #44) -----------------------------------------------------------
+#
+# Probed: ComfyUI's sampler and decoder bars are tqdm lines in its log (the
+# server's stdout), redrawn with \r: " 75%|#######5  | 6/8 [00:05<00:01,  1.13it/s]".
+# The last one is the current step of the current node. Reading the log tail
+# needs no websocket client and no change to how runs are queued.
+
+_TQDM = re.compile(r"(\d{1,3})%\|[^|]*\|\s*(\d+)/(\d+)\s*\[([^\]]*)\]")
+
+
+def log_size(log: Optional[Path] = None) -> int:
+    try:
+        return (log or WORK / "server.log").stat().st_size
+    except OSError:
+        return 0
+
+
+def progress(log: Optional[Path] = None, since: int = 0, tail_bytes: int = 8192) -> Optional[Dict[str, Any]]:
+    """{percent, step, steps, timing} of the latest progress bar in the server log, or None.
+
+    `since`: a byte offset (log_size() when a job started): bars of earlier runs on
+    the same server are ignored. A server restart rewrites the log: an offset past
+    its end then means "from the start".
+    """
+    log = log or WORK / "server.log"
+    try:
+        with log.open("rb") as fh:
+            fh.seek(0, 2)
+            size = fh.tell()
+            start = since if since <= size else 0
+            fh.seek(max(start, size - tail_bytes))
+            text = fh.read().decode("utf-8", "replace")
+    except OSError:
+        return None
+    found = None
+    for m in _TQDM.finditer(text.replace("\r", "\n")):
+        found = m
+    if found is None:
+        return None
+    return {"percent": int(found.group(1)), "step": int(found.group(2)), "steps": int(found.group(3)),
+            "timing": found.group(4).strip()}

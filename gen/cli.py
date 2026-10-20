@@ -186,8 +186,7 @@ def generate(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep
     if reusable(run_dir) is not None:
         return EXIT_OK, "OK (reused) %s" % report_path(run_dir / "manifest.json"), run_dir
 
-    started = comfy.start(rules.comfyui, env)
-    try:
+    with comfy.session(rules.comfyui, env, keep_server=keep_server):
         client = comfy.Client(rules.comfyui.port)
         stats = client.stats() or {}
         env_record = mf.environment(stats, mf.git_head(comfy.comfy_dir(env)),
@@ -226,9 +225,6 @@ def generate(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep
                             execution=execution, outputs=outputs, error=error, inputs=inputs)
         path = run_dir / "manifest.json"
         path.write_text(mf.to_json(manifest), encoding="utf-8")
-    finally:
-        if started and not keep_server:
-            comfy.stop()
     if error is not None:
         where = " in node %s (%s)" % (error["node"], error["node_type"]) if error.get("node") else ""
         return EXIT_TOOL_ERROR, "%s%s: %s. See %s" % (error["type"], where, error["message"],
@@ -409,16 +405,15 @@ def with_repair(stage: str, request: Mapping[str, Any], base_seed: int,
     """Run a stage through the repair loop; write <out_dir>/../repairs/<repair_id>.json.
 
     The server stays up between attempts (a cold start is ~15 s) and is
-    stopped at the end unless it was already running or --keep-server.
+    stopped at the end unless it is kept (--keep-server, `gen server start`) or
+    another process still uses it.
     """
     rules = gen_rules.load()
     pol = repair.policy(rules.repair)
-    was_up = comfy.Client(rules.comfyui.port).stats() is not None
-    try:
+    # One session across the attempts (a cold start is ~15 s); the server
+    # stops at the end unless kept or still used by another process (#45).
+    with comfy.session(rules.comfyui, keep_server=keep_server, ensure_running=False):
         last, attempts = repair.run(stage, base_seed, pol, fn)
-    finally:
-        if not was_up and not keep_server:
-            comfy.stop()
     rec = repair.record(stage, request, pol, last, attempts)
     path = out_dir.parent / "repairs" / (rec["repair_id"] + ".json")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -438,7 +433,7 @@ def concept_repaired(subject: str, asset_class: str, style: str, seed: int = 0, 
     """`gen concept --repair`: retry by seed per conventions/generation.yaml `repair`."""
     request = {"subject": subject, "asset_class": asset_class, "style": style, "base_seed": seed}
     return with_repair(CONCEPT_STAGE, request, seed, lambda s: _outcome(
-        lambda: concept(subject, asset_class, style, s, out_dir, True, env), "concept.report.json"),
+        lambda: concept(subject, asset_class, style, s, out_dir, False, env), "concept.report.json"),
         out_dir, keep_server)
 
 
@@ -451,7 +446,7 @@ def model_repaired(source: str, asset_class: str, seed: int = 56, out_dir: Path 
     request = {"image_sha256": sha256_file(image) if image.is_file() else None,
                "asset_class": asset_class, "base_seed": seed}
     return with_repair(MODEL_STAGE, request, seed, lambda s: _outcome(
-        lambda: model(source, asset_class, s, out_dir, True, env), "model.report.json"),
+        lambda: model(source, asset_class, s, out_dir, False, env), "model.report.json"),
         out_dir, keep_server)
 
 
@@ -459,6 +454,7 @@ def server(action: str, env: Mapping[str, str] = os.environ) -> Tuple[int, str]:
     rules = gen_rules.load().comfyui
     if action == "start":
         started = comfy.start(rules, env)
+        comfy.keep()   # explicit start: no session stops it, only `gen server stop`
         return EXIT_OK, ("started on port %d" if started else "already running on port %d") % rules.port
     if action == "stop":
         return EXIT_OK, "stopped" if comfy.stop() else "not running (nothing started by artpipe)"
@@ -466,8 +462,9 @@ def server(action: str, env: Mapping[str, str] = os.environ) -> Tuple[int, str]:
     if stats is None:
         return EXIT_OK, "not running"
     owner = "artpipe" if comfy.is_ours(stats) else "NOT artpipe (Desktop app?)"
-    return EXIT_OK, "running on port %d, ComfyUI %s, started by %s" % (
-        rules.port, (stats.get("system") or {}).get("comfyui_version"), owner)
+    return EXIT_OK, "running on port %d, ComfyUI %s, started by %s, %d user(s)%s" % (
+        rules.port, (stats.get("system") or {}).get("comfyui_version"), owner, len(comfy.live_users()),
+        ", kept" if comfy.kept() else "")
 
 
 def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:

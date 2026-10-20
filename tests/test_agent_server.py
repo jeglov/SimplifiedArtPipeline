@@ -56,3 +56,40 @@ def test_artpipe_info_over_stdio_with_a_minimal_environment():
 
 def test_the_venv_matches_the_lock():
     assert STATE["installed_lock_sha256"] == STATE["lock_sha256"] and STATE["mcp"] == RULES.mcp_version
+
+
+def job_session(tool, args, mode="same", timeout=900):
+    proc = subprocess.run([str(VENV_PY), str(ROOT / "tests" / "agent_client" / "job_session.py"), tool,
+                           json.dumps(args), mode], cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          universal_newlines=True, encoding="utf-8", timeout=timeout)
+    assert proc.returncode == 0, proc.stderr[-3000:]
+    return json.loads(proc.stdout)
+
+
+SHORT = "tests/fixtures/banners/short_endcard.yaml"
+
+
+def test_a_render_job_over_mcp_survives_a_server_restart():
+    # Started by one server process, followed to the end by another: jobs live on disk.
+    r = job_session("banners_render", {"kit": "spotcap_grove", "template": SHORT, "repair": False}, "restart")
+    assert r["start"]["job_id"].startswith("banners-render-") and r["start"]["state"] == "queued"
+    res = r["result"]
+    assert res["state"] == "done" and res["exit_code"] == 1    # the 1 s test spot fails duration + end card
+    assert "banner.duration" in res["stderr"] and "banner.end_card" in res["stderr"]
+    assert [s["state"] for s in r["statuses"]][-1] == "done"
+
+
+def test_the_tool_list_has_the_job_tools():
+    tools = set(client()["tools"])
+    assert {"job_status", "job_result", "job_cancel", "job_list", "banners_render", "gen_concept"} <= tools
+
+
+@pytest.mark.comfy
+def test_a_gpu_job_reports_comfyui_progress_over_mcp():
+    import time
+    seed = int(time.time()) % 100000 + 100000        # a fresh seed: a reused run would have no progress
+    r = job_session("gen_concept", {"subject": "a small green potion bottle", "asset_class": "pickup",
+                                    "style": "casual_toon", "seed": seed, "repair": False})
+    steps = [s["comfy_progress"]["step"] for s in r["statuses"] if s.get("comfy_progress")]
+    assert steps and max(steps) == 8 and steps == sorted(steps)   # 8 sampler steps, never backwards
+    assert r["result"]["state"] == "done" and r["result"]["exit_code"] in (0, 1)

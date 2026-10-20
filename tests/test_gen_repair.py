@@ -163,8 +163,11 @@ class FakeStage:
 
 
 @pytest.fixture
-def no_server(monkeypatch):
+def no_server(monkeypatch, tmp_path):
     calls = {"stop": 0}
+    # The real out/gen/comfy may hold a live, kept server (the generation tests start one):
+    # the server-sharing state of these fakes lives in a temp folder.
+    monkeypatch.setattr(cli.comfy, "WORK", tmp_path / "comfy")
     monkeypatch.setattr(cli.comfy.Client, "stats", lambda self: None)
 
     def stop(*a, **k):
@@ -184,7 +187,8 @@ def test_model_repair_retries_by_seed_and_writes_the_record(monkeypatch, tmp_pat
     stage = FakeStage(tmp_path, [["model.uv_overlap"], ["model.manifold"], []])
     monkeypatch.setattr(cli, "model", stage)
     code, message, rec = cli.model_repaired(str(write_image(tmp_path)), "pickup", 56, tmp_path / "runs")
-    assert code == 0 and stage.seeds == [56, 1056, 2056] and all(stage.keep)
+    # The attempts don't keep the server themselves: the repair loop's session holds it (#45).
+    assert code == 0 and stage.seeds == [56, 1056, 2056] and not any(stage.keep)
     assert message.startswith("PASS after 3 attempt(s)") and rec["accepted_run"].endswith("run-2056")
     (path,) = (tmp_path / "repairs").glob("model-*.json")
     on_disk = json.loads(path.read_text(encoding="utf-8"))

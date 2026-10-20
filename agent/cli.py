@@ -3,6 +3,8 @@
     artpipe agent setup      build the server's venv: py -<python> + agent/requirements.lock (hashes, no deps)
     artpipe agent status     JSON: the venv, its Python, the installed mcp version, the lock hash
     artpipe agent serve      the MCP server over stdio (artpipe.cmd runs it in the venv, not here)
+    artpipe agent jobs       JSON: every job (out/agent/jobs/) with its state
+    artpipe agent job-run ID run a queued job to the end (the MCP server starts this, detached)
 
 Exit codes: 0 ok / 2 tool error.
 """
@@ -98,12 +100,22 @@ def setup(rules, env: Mapping[str, str] = os.environ) -> str:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     p = argparse.ArgumentParser(prog="artpipe agent", description=__doc__.split("\n\n")[0])
-    p.add_argument("command", choices=("setup", "status", "serve"))
+    p.add_argument("command", choices=("setup", "status", "serve", "jobs", "job-run"))
+    p.add_argument("job_id", nargs="?")
     args = p.parse_args(argv)
     try:
         rules = agent_rules.load()
         if args.command == "serve":
             raise ToolError("`artpipe agent serve` runs in the agent venv: call it through artpipe.cmd")
+        if args.command == "job-run":
+            from agent import runner
+            if not args.job_id:
+                raise ToolError("job-run needs a job id")
+            return runner.run(args.job_id)
+        if args.command == "jobs":
+            from agent.core import jobs
+            print(json.dumps(jobs.list_jobs(), indent=2, sort_keys=True))
+            return 0
         if args.command == "setup":
             print("artpipe agent: %s" % setup(rules))
             return 0
