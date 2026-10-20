@@ -21,4 +21,61 @@ comfyui:
 # (a re-downloaded or swapped file changes outputs without changing its name).
 #   <id>: {folder: <ComfyUI model folder>, file: <name>, sha256: <hex>,
 #          licence: <SPDX id or name>, source: <download URL>}
-models: {}
+models:
+  # Z-Image-Turbo (Tongyi-MAI), ComfyUI repack at Comfy-Org/z_image_turbo
+  # commit 6fc90a3b. Hashes are the repo's LFS sha256 at that commit. The
+  # files match ComfyUI's official template image_z_image_turbo_int8.json.
+  z_image_turbo_int8:
+    folder: diffusion_models
+    file: z_image_turbo_int8_convrot.safetensors
+    sha256: be517ebd47c912a5626a588e1aeea43e6be4a43c0cdcd2b48a2a780d9f358635
+    licence: Apache-2.0
+    source: https://huggingface.co/Comfy-Org/z_image_turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/diffusion_models/z_image_turbo_int8_convrot.safetensors
+  qwen3_4b_fp8:
+    folder: text_encoders
+    file: qwen_3_4b_fp8_mixed.safetensors
+    sha256: 72450b19758172c5a7273cf7de729d1c17e7f434a104a00167624cba94f68f15
+    licence: Apache-2.0
+    source: https://huggingface.co/Comfy-Org/z_image_turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/text_encoders/qwen_3_4b_fp8_mixed.safetensors
+  z_image_vae:
+    folder: vae
+    file: ae.safetensors
+    sha256: afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38
+    licence: Apache-2.0
+    source: https://huggingface.co/Comfy-Org/z_image_turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/vae/ae.safetensors
+
+  # BiRefNet foreground segmentation (ZhengPeng7/BiRefNet, MIT), ComfyUI
+  # repack Comfy-Org/BiRefNet at commit 25511f87. The same mask feeds the
+  # concept checks and image-to-3D, so the checks judge what the 3D model sees.
+  birefnet:
+    folder: background_removal
+    file: birefnet.safetensors
+    sha256: 9ab37426bf4de0567af6b5d21b16151357149139362e6e8992021b8ce356a154
+    licence: MIT
+    source: https://huggingface.co/Comfy-Org/BiRefNet/resolve/25511f8787e51912e1480706b4e47b8f467fbf72/background_removal/birefnet.safetensors
+
+# Concept image checks (gen.core.concept): is this image usable for
+# image-to-3D? Both the image and its BiRefNet mask are sampled on a grid
+# (cheap, and robust to single-pixel noise). The background check reads the
+# image's border ring; the object checks read the mask, the same one
+# image-to-3D gets (probed: a soft contact shadow is "object" by colour but
+# not in the mask).
+concept:
+  grid: 128
+  # A mask cell is object when its value is at least this (0-255).
+  mask_threshold: 128
+  # A pixel is background when no channel differs from the background colour
+  # by more than this (0-255).
+  background_tolerance: 28
+  # Share of border-ring pixels that must be background: a plain backdrop.
+  background_uniformity_min: 0.97
+  # Share of the image the object covers. Too small: image-to-3D gets few
+  # pixels of detail. Too big: the object is cropped or fills the frame.
+  coverage_min: 0.06
+  coverage_max: 0.70
+  # Object bounding box distance to every edge, as a share of the image side.
+  margin_min: 0.02
+  # Largest connected object region / all object pixels: one object, not a set.
+  single_object_min: 0.95
+  # Object regions smaller than this many grid cells are ignored as specks.
+  speck_cells: 4

@@ -13,6 +13,7 @@ from typing import Dict, Optional
 from validate.core.conventions import DEFAULT_DIR, ConventionError, _read_yaml, _Reader
 
 FILE = "generation.yaml"
+STYLES_FILE = "gen_styles.yaml"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _MODEL_ID = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -38,9 +39,51 @@ class ModelPin:
 
 
 @dataclass(frozen=True)
+class ConceptRules:
+    """Thresholds of the concept image checks (gen.core.concept)."""
+    grid: int
+    mask_threshold: int
+    background_tolerance: int
+    background_uniformity_min: float
+    coverage_min: float
+    coverage_max: float
+    margin_min: float
+    single_object_min: float
+    speck_cells: int
+
+
+@dataclass(frozen=True)
 class GenerationRules:
     comfyui: ComfyRules
     models: Dict[str, ModelPin]
+    concept: ConceptRules
+
+
+@dataclass(frozen=True)
+class Style:
+    id: str
+    description: str
+    prompt: str  # contains {subject} exactly once
+
+
+@dataclass(frozen=True)
+class StyleRules:
+    framing: str
+    classes: Dict[str, str]
+    styles: Dict[str, Style]
+
+    def prompt(self, subject: str, asset_class: str, style: str) -> str:
+        """The full concept prompt. Unknown class or style: ConventionError listing the options."""
+        if style not in self.styles:
+            raise ConventionError("unknown style %r, expected one of %s" % (style, sorted(self.styles)))
+        if asset_class not in self.classes:
+            raise ConventionError("no concept framing for class %r (gen_styles.yaml classes: %s)"
+                                  % (asset_class, sorted(self.classes)))
+        subject = " ".join(subject.split())
+        if not subject or len(subject) > 300 or "{" in subject or "}" in subject:
+            raise ConventionError("subject must be 1-300 characters without braces")
+        return " ".join((self.styles[style].prompt.replace("{subject}", subject),
+                         self.classes[asset_class], self.framing))
 
 
 def _positive(r: _Reader, key: str) -> int:
@@ -79,9 +122,66 @@ def parse(data: dict) -> GenerationRules:
         if "/" in pin.file or "\\" in pin.file or "/" in pin.folder or "\\" in pin.folder:
             raise ConventionError("%s: folder and file must be plain names" % where)
         models[mid] = pin
+    k = root.sub("concept")
+    concept = ConceptRules(
+        _positive(k, "grid"), _byte(k, "mask_threshold"), _positive(k, "background_tolerance"),
+        _share(k, "background_uniformity_min"), _share(k, "coverage_min"), _share(k, "coverage_max"),
+        _share(k, "margin_min"), _share(k, "single_object_min"), _positive(k, "speck_cells"))
+    k.done()
+    if concept.coverage_min >= concept.coverage_max:
+        raise ConventionError("%s.concept: coverage_min must be < coverage_max" % FILE)
     root.done()
-    return GenerationRules(comfy, models)
+    return GenerationRules(comfy, models, concept)
+
+
+def _byte(r: _Reader, key: str) -> int:
+    val = r.get(key, int)
+    if not 1 <= val <= 255:
+        raise ConventionError("%s.%s: must be 1-255, got %d" % (r.where, key, val))
+    return val
+
+
+def _share(r: _Reader, key: str) -> float:
+    val = r.get(key, float)
+    if not 0.0 <= val <= 1.0:
+        raise ConventionError("%s.%s: must be between 0 and 1, got %s" % (r.where, key, val))
+    return val
+
+
+def parse_styles(data: dict, class_names=None) -> StyleRules:
+    where = STYLES_FILE
+    root = _Reader(data, where)
+    root.get("version", int)
+    framing = " ".join(root.get("framing", str).split())
+    classes = {}
+    raw_classes = root.get("classes", dict)
+    for name in sorted(raw_classes):
+        if class_names is not None and name not in class_names:
+            raise ConventionError("%s.classes.%s: not an asset class in mesh_budgets.yaml" % (where, name))
+        if not isinstance(raw_classes[name], str) or not raw_classes[name].strip():
+            raise ConventionError("%s.classes.%s: expected a sentence" % (where, name))
+        classes[name] = " ".join(raw_classes[name].split())
+    styles = {}
+    for sid, raw in sorted(root.get("styles", dict).items()):
+        if not _MODEL_ID.match(str(sid)):
+            raise ConventionError("%s.styles.%s: style id must be snake_case" % (where, sid))
+        r = _Reader(raw, "%s.styles.%s" % (where, sid))
+        prompt = " ".join(r.get("prompt", str).split())
+        style = Style(sid, r.get("description", str), prompt)
+        r.done()
+        if prompt.count("{subject}") != 1 or prompt.replace("{subject}", "").count("{"):
+            raise ConventionError("%s.styles.%s.prompt: needs {subject} exactly once and no other braces"
+                                  % (where, sid))
+        styles[sid] = style
+    if not styles:
+        raise ConventionError("%s: define at least one style" % where)
+    root.done()
+    return StyleRules(framing, classes, styles)
 
 
 def load(conventions_dir: Optional[Path] = None) -> GenerationRules:
     return parse(_read_yaml((conventions_dir or DEFAULT_DIR) / FILE))
+
+
+def load_styles(conventions_dir: Optional[Path] = None, class_names=None) -> StyleRules:
+    return parse_styles(_read_yaml((conventions_dir or DEFAULT_DIR) / STYLES_FILE), class_names)

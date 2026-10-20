@@ -1,0 +1,32 @@
+# Art styles for generated concept images: one entry per game look.
+#
+# A concept prompt is   <style prompt with {subject}> + " " + <class framing> + " " + <framing>
+# so every game's assets share one look, and every image is framed the way
+# image-to-3D needs it (one object, whole, centred, plain backdrop, no cast
+# shadow). Read by gen/core/rules.py. Z-Image-Turbo runs at cfg 1, where a
+# negative prompt has no effect: what to avoid is said in the prompt itself.
+version: 1
+
+# Appended to every prompt: the image-to-3D contract. The concept checks
+# (conventions/generation.yaml `concept`) verify the result.
+framing: >-
+  Single isolated object, the whole object fully visible and centred with empty space around it,
+  three-quarter view from slightly above, plain solid light grey studio background,
+  soft even lighting, no cast shadow, no text, no logo, no other objects.
+
+# Per asset class: what kind of object it is, in words a model understands.
+classes:
+  pickup: "A collectible game pickup item."
+  prop_small: "A small game prop."
+
+styles:
+  casual_toon:
+    description: Bright casual mobile look (hyper-casual, puzzle, idle games).
+    prompt: >-
+      {subject}. Stylized 3D game asset, chunky simple shapes, smooth toon shading,
+      bright saturated colours, clean readable silhouette.
+  low_poly_flat:
+    description: Faceted low-poly look with flat colours (arcade, runner games).
+    prompt: >-
+      {subject}. Low-poly 3D game asset with visible flat facets, flat-shaded solid colours,
+      no texture detail, minimal geometric shapes.

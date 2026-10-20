@@ -19,6 +19,8 @@ from validate.core.conventions import DEFAULT_DIR
 jsonschema = pytest.importorskip("jsonschema", reason="pip install -r requirements-maya.txt")
 VALIDATOR = jsonschema.Draft202012Validator(
     json.loads((DEFAULT_DIR / "gen_manifest.schema.json").read_text(encoding="utf-8")))
+REPORT = jsonschema.Draft202012Validator(
+    json.loads((DEFAULT_DIR / "report.schema.json").read_text(encoding="utf-8")))
 
 
 def png_chunks(data: bytes):
@@ -68,3 +70,23 @@ def test_same_request_gives_identical_bytes_after_a_restart(comfy_server, tmp_pa
     assert first["run_id"] == second["run_id"]
     assert second["execution"]["cached_nodes"] == []
     assert first["outputs"][0]["sha256"] == second["outputs"][0]["sha256"]
+
+
+def test_concept_run_records_every_model_and_writes_a_valid_report(comfy_server, tmp_path):
+    # What the pipeline does with the output, not the model's pixels (GPU-dependent).
+    try:
+        code, msg, run_dir = cli.concept("a golden coin with a star emblem", "pickup", "casual_toon",
+                                         seed=1, out_dir=tmp_path, keep_server=True)
+    except cli.ToolError as exc:
+        if "missing" in str(exc):
+            pytest.skip(str(exc))  # models not downloaded on this machine
+        raise
+    assert code in (0, 1), msg
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert sorted(m["id"] for m in manifest["models"]) == ["birefnet", "qwen3_4b_fp8", "z_image_turbo_int8", "z_image_vae"]
+    assert sorted(o["name"] for o in manifest["outputs"]) == ["image", "mask"]
+    report = json.loads((run_dir / "concept.report.json").read_text(encoding="utf-8"))
+    assert sorted(e.message for e in REPORT.iter_errors(report)) == []
+    assert report["tool"] == "artpipe.gen.concept" and report["status"] in ("pass", "fail")
+    assert sorted(r["id"] for r in report["results"]) == [
+        "concept.background", "concept.coverage", "concept.margin", "concept.single_object"]

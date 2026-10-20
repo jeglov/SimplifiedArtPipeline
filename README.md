@@ -70,7 +70,7 @@ Android Build Support. The code stays Python 3.9-compatible.
 .\artpipe.cmd unity setup                                           # once: URP, Linear, text assets
 .\artpipe.cmd fixtures                                              # build 45 test scenes into out\fixtures
 .\artpipe.cmd build out\fixtures\SM_Messy.ma --class prop_small     # Maya -> Unity prefab
-.\artpipe.cmd test                                                  # ~570 tests, ~4.5 min (close the Unity Editor first)
+.\artpipe.cmd test                                                  # ~660 tests, ~5 min (close the Unity Editor first)
 .\artpipe.cmd test -m "not maya and not unity and not comfy"        # pure Python only, ~3 s, any Python
 ```
 
@@ -85,6 +85,8 @@ runner uses the exact version pinned in `unity/ProjectSettings` (or `%UNITY%`).
 | `artpipe unity verify` | re-check every asset under `Assets/Art` from the files, with no import cache |
 | `artpipe unity setup\|test` | one-time project setup; Unity EditMode tests |
 | `artpipe gen run WORKFLOW [--param NAME VALUE ...]` | generation stage: run a workflow from `gen/workflows/` on the pinned, headless ComfyUI; outputs plus a provenance manifest in `out/gen/runs/<run_id>/` |
+| `artpipe gen concept "SUBJECT" --class C --style S [--seed N]` | concept image (Z-Image-Turbo, prompt from the game's style in `conventions/gen_styles.yaml`) plus its foreground mask, checked for image-to-3D: plain background, coverage, margin, one object |
+| `artpipe texture FILE... [--class C]` | the Unity texture rules in Python, before a texture reaches Unity (same check ids) |
 | `artpipe gen server start\|stop\|status` | the pipeline's own ComfyUI server (keep it up for a batch: startup is ~15 s) |
 | `artpipe conventions --dump\|--check` | write / verify `conventions/conventions.lock.json` |
 | `artpipe docs [--check]` | regenerate the tables in the docs |

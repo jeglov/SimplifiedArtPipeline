@@ -23,7 +23,9 @@ Deferred issues are tracked in [docs/backlog.md](docs/backlog.md), tagged by sta
 - Phase 2: canonical FBX export, Unity 6 URP project with the `com.artpipe.importer` package (import gate, per-class ModelImporter/TextureImporter rules, GPU vertex budgets, Prefab Variants), batchmode `artpipe unity import|verify`, and `artpipe build` (Maya scene to Unity prefab). See docs/unity_import.md and README.md.
 - Report contracts: `conventions/*.schema.json`. Rules reach C# only through `conventions.lock.json` (`artpipe conventions --dump`).
 - Phase 3 so far: the `gen/` harness. `artpipe gen run WORKFLOW` drives the pinned ComfyUI headless (its own server; it refuses the Desktop app's), checks model pins by sha256, reuses runs by run id, and writes `out/gen/runs/<run_id>/manifest.json` (`conventions/gen_manifest.schema.json`). Rules: `conventions/generation.yaml`. Probed behaviours: docs/generation.md.
-- Tests: `artpipe test` (~570, ~4.5 min, close the Unity Editor first); fast run `-m "not maya and not unity and not comfy"`. Real ComfyUI replies are recorded in `tests/fixtures/comfy/` (`artpipe py tests/fixtures/comfy_record.py`).
+- `artpipe gen concept "SUBJECT" --class C --style S`: Z-Image-Turbo int8 concept image + BiRefNet mask, prompt from `conventions/gen_styles.yaml`, `concept.*` checks on the mask (the mask image-to-3D uses). `artpipe texture`: Unity's texture rules in pure Python (`validate/core/image.py` reads PNG/TGA without Pillow).
+- Models live in `%LOCALAPPDATA%\Comfy-Desktop\ComfyUI-Shared\models`, pinned by sha256 in `generation.yaml` (~21 GB downloaded: Z-Image, Qwen3, VAE, BiRefNet, TRELLIS.2, DINOv3). ComfyUI's Python (with Pillow) is `...\ComfyUI\.venv\Scripts\python.exe`, handy for contact sheets.
+- Tests: `artpipe test` (~660, ~5 min, close the Unity Editor first); fast run `-m "not maya and not unity and not comfy"`. Real ComfyUI replies are recorded in `tests/fixtures/comfy/` (`artpipe py tests/fixtures/comfy_record.py`).
 
 ## Architecture rules (non-negotiable)
 - Each check is a small, independent module, and all checks share the same interface:

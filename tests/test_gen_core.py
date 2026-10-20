@@ -32,7 +32,13 @@ def rules_data(**models):
     return {"version": 1,
             "comfyui": {"version": "0.42.1", "commit": COMMIT, "port": 8188,
                         "startup_timeout_s": 180, "run_timeout_s": 1800},
-            "models": models}
+            "models": models,
+            "concept": dict(CONCEPT)}
+
+
+CONCEPT = {"grid": 64, "mask_threshold": 128, "background_tolerance": 28, "background_uniformity_min": 0.97,
+           "coverage_min": 0.06, "coverage_max": 0.7, "margin_min": 0.02,
+           "single_object_min": 0.95, "speck_cells": 4}
 
 
 def pin(file="z.safetensors", sha=SHA):

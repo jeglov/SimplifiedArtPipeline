@@ -7,10 +7,17 @@ behaviours the harness is built on, and the harness itself.
 
 ## Models and licences
 
-| Role | Model | Licence | Why |
+| Role | Model (file) | Licence | Why |
 |---|---|---|---|
-| Concept image | Z-Image-Turbo (fp8) | Apache 2.0 | 8 steps, community-reported to fit 8 GB |
-| Image to 3D | TRELLIS.2, native ComfyUI nodes | MIT (code and weights) | Textured, UV-unwrapped mesh with PBR maps; native nodes drop the non-commercial nvdiffrast/nvdiffrec |
+| Concept image | Z-Image-Turbo int8 (`z_image_turbo_int8_convrot`, 6.2 GB) | Apache 2.0 | The file ComfyUI's official int8 template uses. int8 runs on Ampere's tensor cores; half the size of bf16, so less offloading on 8 GB. nvfp4 needs Blackwell |
+| Text encoder | Qwen3 4B fp8 mixed (5.6 GB) | Apache 2.0 | Same template. The 3070 has no fp8 compute; fp8 only saves storage |
+| VAE | `ae.safetensors` (0.3 GB) | Apache 2.0 | Same template |
+| Foreground mask | BiRefNet (0.4 GB) | MIT | The mask image-to-3D uses, so the concept checks judge what the 3D model sees |
+| Image to 3D | TRELLIS.2 int8 (5.3 GB) + shape and texture VAEs | MIT (code and weights) | Textured, UV-unwrapped mesh with PBR maps; native nodes drop the non-commercial nvdiffrast/nvdiffrec |
+| Image encoder for TRELLIS.2 | DINOv3 ViT-L (1.2 GB) | **DINOv3 License** (Meta) | Commercial use allowed, outputs unrestricted; redistributing the weights requires the licence text and "Built with DINOv3". The Comfy-Org repack labels it MIT: the pin records the upstream licence, not the repack's tag |
+
+All files come from Comfy-Org repacks pinned at a repo commit; each sha256 is
+the repo's LFS id at that commit (checked again after download).
 
 Ruled out: Hunyuan3D 2.x (licence territory excludes the EU, the UK and South
 Korea), Stable Fast 3D (free only under US $1M revenue), FLUX.1-dev
@@ -149,3 +156,65 @@ second on ComfyUI replies recorded from the real server
 (`tests/fixtures/comfy/`, refreshed by `artpipe py
 tests/fixtures/comfy_record.py`, machine paths scrubbed).
 `tests/generation/` (marker `comfy`) runs the real server.
+
+## Concept images: `artpipe gen concept`
+
+```
+artpipe gen concept "a golden coin with a star emblem" --class pickup --style casual_toon --seed 1
+# artpipe gen: PASS out/gen/runs/concept_zimage-6439e1ea90da/concept.report.json
+```
+
+1. **Prompt** = the style's prompt with the subject (`conventions/gen_styles.yaml`)
+   + the class sentence + a fixed **framing** contract: one whole object,
+   centred with space around it, three-quarter view, plain light grey
+   backdrop, even light, no cast shadow, no text. Z-Image-Turbo runs at cfg 1,
+   where a negative prompt does nothing, so what to avoid is in the prompt.
+   One style per game look; the same style gives every asset of a game the
+   same treatment (two shipped: `casual_toon`, `low_poly_flat`).
+2. **Workflow** `concept_zimage`: the official int8 template graph (8 steps,
+   cfg 1, `res_multistep`/`simple`, AuraFlow shift 3, 1024 px), plus BiRefNet,
+   which saves the foreground mask as a second output.
+3. **Checks** (`gen/core/concept.py`, thresholds in `generation.yaml`
+   `concept`), written to `concept.report.json` in the run folder (the same
+   report contract as the Maya stage, tool `artpipe.gen.concept`):
+   `concept.background` (the image's border is one plain colour),
+   `concept.coverage` (6-70 % of the frame), `concept.margin` (not touching
+   the edge), `concept.single_object` (one connected region). Exit 0 usable /
+   1 not usable / 2 tool error.
+
+Measured on the RTX 3070 Laptop (8 GB): peak VRAM **7.1 GB**, **~12 s** per
+image on a warm server (12.7 s sampling + VAE + mask on the first). The first
+run of a session also hashes the 12 GB of models once (then cached by size
+and mtime) and starts the server (~15 s).
+
+**Probed: measure the object on the mask, not by colour.** The first coin had
+a soft contact shadow despite "no cast shadow". By colour it counted as
+object and set the margin to 5 % (the coin itself had ~20 %). BiRefNet's mask
+leaves the shadow out, and image-to-3D uses that same mask, so the object
+checks read the mask. Recorded (256 px copies in `tests/fixtures/gen/`): this
+coin passes, and a three-apples image fails `concept.single_object` (3
+regions, largest 34 %).
+
+First batch, seed 1: coin, gem, heart power-up (pickup), crate, traffic cone,
+cactus (prop_small), both styles: **6 of 6 pass**, all usable on inspection.
+Built to fail: "three separate apples" fails single_object; "a plank cropped
+at both ends" came out whole and passes: the framing contract overrode the
+subject.
+
+What the checks can't see: the wrong object, a rendered logo, a style that
+drifts between two seeds. Those need a human look or a vision-model review
+(backlog #48).
+
+## Textures before Unity: `artpipe texture` (backlog #40)
+
+`artpipe texture FILE... [--class C]` runs `validate/core/texture.py`, the
+same checks as the Unity package's `TextureRulesUnity.SourceChecks`
+(`texture.name`, `source_format`, `power_of_two`, `min_size`, `square`,
+`source_size` as a warning, `alpha`), with the same ids, severities and
+metrics, from the same conventions. The PNG/TGA reader
+(`validate/core/image.py`) is pure Python: headers for the rules, and an
+8-bit decoder (all five row filters) for checks on pixels. "Has alpha" means
+an alpha channel or a PNG `tRNS` chunk, which is what an engine sees.
+**Parity is tested on the real Editor**: eight textures (good, NPOT, too
+small, oversized, alpha forbidden or required, TGA) imported into Unity give
+the same verdict per check id as Python.

@@ -1,6 +1,7 @@
 """Run a generation workflow on the pinned ComfyUI and record its provenance.
 
     artpipe gen run WORKFLOW [--param NAME VALUE ...] [--out DIR] [--keep-server]
+    artpipe gen concept "SUBJECT" --class C --style S [--seed N] [--out DIR] [--keep-server]
     artpipe gen server start|stop|status
 
 WORKFLOW: an id from gen/workflows/ (e.g. smoke_empty_image) or a path to a
@@ -37,12 +38,18 @@ from gen.core import history as hist
 from gen.core import manifest as mf
 from gen.core import rules as gen_rules
 from gen.core import workflow as wfl
+from gen.core import concept as concept_checks
 from gen.core.rules import ModelPin
+from validate.core import conventions as conv
+from validate.core.image import ImageError, decode_png
 from validate.core.paths import report_path
+from validate.core.result import Report
 
 RUNS = comfy.OUT / "runs"
 HASH_CACHE = comfy.OUT / "model_hashes.json"
 EXIT_OK, EXIT_TOOL_ERROR = 0, 2
+CONCEPT_WORKFLOW = "concept_zimage"
+CONCEPT_TOOL = "artpipe.gen.concept"
 
 
 def sha256_file(path: Path) -> str:
@@ -109,6 +116,13 @@ def reusable(run_dir: Path) -> Optional[Dict[str, Any]]:
 
 def run(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep_server: bool = False,
         env: Mapping[str, str] = os.environ) -> Tuple[int, str]:
+    code, message, _ = generate(workflow_arg, pairs, out_dir, keep_server, env)
+    return code, message
+
+
+def generate(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep_server: bool = False,
+             env: Mapping[str, str] = os.environ) -> Tuple[int, str, Path]:
+    """Run one workflow. (exit code, message, run folder with manifest.json)."""
     rules = gen_rules.load()
     wf = wfl.load(Path(workflow_arg), rules)
     values = wfl.resolve_params(wf, wfl.parse_overrides(list(pairs), wf))
@@ -118,7 +132,7 @@ def run(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep_serv
     rid = wfl.run_id(wf, graph, {p.id: sha for p, sha in models}, rules.comfyui.commit)
     run_dir = out_dir / rid
     if reusable(run_dir) is not None:
-        return EXIT_OK, "OK (reused) %s" % report_path(run_dir / "manifest.json")
+        return EXIT_OK, "OK (reused) %s" % report_path(run_dir / "manifest.json"), run_dir
 
     started = comfy.start(rules.comfyui, env)
     try:
@@ -156,8 +170,8 @@ def run(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep_serv
     if error is not None:
         where = " in node %s (%s)" % (error["node"], error["node_type"]) if error.get("node") else ""
         return EXIT_TOOL_ERROR, "%s%s: %s. See %s" % (error["type"], where, error["message"],
-                                                      report_path(path))
-    return EXIT_OK, "OK %s" % report_path(path)
+                                                      report_path(path)), run_dir
+    return EXIT_OK, "OK %s" % report_path(path), run_dir
 
 
 def _collect(client: comfy.Client, ex: hist.Execution, wf: wfl.Workflow, run_dir: Path) -> List[Dict[str, Any]]:
@@ -168,6 +182,34 @@ def _collect(client: comfy.Client, ex: hist.Execution, wf: wfl.Workflow, run_dir
         outputs.append({"name": name, "path": report_path(run_dir / local),
                         "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)})
     return outputs
+
+
+def concept(subject: str, asset_class: str, style: str, seed: int = 0, out_dir: Path = RUNS,
+            keep_server: bool = False, env: Mapping[str, str] = os.environ) -> Tuple[int, str, Path]:
+    """Concept image for one asset, then the image-to-3D suitability checks.
+
+    Writes <run>/concept.report.json (report.schema.json, tool artpipe.gen.concept).
+    Exit 0 the image is usable / 1 it isn't (the report says why) / 2 tool error.
+    """
+    c = conv.load()
+    c.asset_class(asset_class)  # unknown class: KeyError listing the classes
+    styles = gen_rules.load_styles(class_names=c.class_names)
+    prompt = styles.prompt(subject, asset_class, style)
+    code, message, run_dir = generate(CONCEPT_WORKFLOW, ["prompt=" + prompt, "seed=%d" % seed],
+                                      out_dir, keep_server, env)
+    if code != EXIT_OK:
+        return code, message, run_dir
+    image = run_dir / "image.png"
+    shown = report_path(image)
+    try:
+        results = concept_checks.check(decode_png(image), decode_png(run_dir / "mask.png"),
+                                       gen_rules.load().concept, shown)
+        report = Report(shown, sha256_file(image), asset_class, results=results, tool=CONCEPT_TOOL)
+    except (ImageError, ValueError, OSError) as exc:
+        report = Report(shown, sha256_file(image), asset_class, tool_error=str(exc), tool=CONCEPT_TOOL)
+    out = run_dir / "concept.report.json"
+    out.write_text(report.to_json(), encoding="utf-8")
+    return report.exit_code, "%s %s" % (report.status.value.upper(), report_path(out)), run_dir
 
 
 def server(action: str, env: Mapping[str, str] = os.environ) -> Tuple[int, str]:
@@ -195,6 +237,13 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     r.add_argument("--param", action="append", default=[], nargs=2, metavar=("NAME", "VALUE"))
     r.add_argument("--out", default=str(RUNS), help="runs folder (default out/gen/runs)")
     r.add_argument("--keep-server", action="store_true", help="leave ComfyUI running afterwards")
+    k = sub.add_parser("concept", help="concept image for one asset + image-to-3D suitability checks")
+    k.add_argument("subject", help='what the object is, e.g. "a golden coin with a star"')
+    k.add_argument("--class", dest="asset_class", required=True)
+    k.add_argument("--style", required=True, help="style id from conventions/gen_styles.yaml")
+    k.add_argument("--seed", type=int, default=0)
+    k.add_argument("--out", default=str(RUNS))
+    k.add_argument("--keep-server", action="store_true")
     s = sub.add_parser("server", help="start/stop/status of the pipeline's ComfyUI")
     s.add_argument("action", choices=("start", "stop", "status"))
     return p.parse_args(argv)
@@ -206,10 +255,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.command == "run":
             pairs = ["%s=%s" % (name, value) for name, value in args.param]
             code, message = run(args.workflow, pairs, Path(os.path.abspath(args.out)), args.keep_server)
+        elif args.command == "concept":
+            code, message, _ = concept(args.subject, args.asset_class, args.style, args.seed,
+                                       Path(os.path.abspath(args.out)), args.keep_server)
         else:
             code, message = server(args.action)
-    except (ToolError, gen_rules.ConventionError) as exc:
-        code, message = EXIT_TOOL_ERROR, str(exc)
+    except (ToolError, gen_rules.ConventionError, KeyError) as exc:
+        code, message = EXIT_TOOL_ERROR, str(exc).strip("'\"")
     print("artpipe gen: %s" % message, file=sys.stdout if code == EXIT_OK else sys.stderr)
     return code
 

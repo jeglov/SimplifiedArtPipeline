@@ -1,0 +1,194 @@
+{
+  "id": "concept_zimage",
+  "description": "Text to concept image with Z-Image-Turbo int8, plus the BiRefNet foreground mask the image-to-3D stage will use. Generation graph and settings as ComfyUI's official template image_z_image_turbo_int8.json (8 steps, cfg 1, res_multistep/simple, AuraFlow shift 3); the prompt comes from conventions/gen_styles.yaml via `artpipe gen concept`.",
+  "models": [
+    "z_image_turbo_int8",
+    "qwen3_4b_fp8",
+    "z_image_vae",
+    "birefnet"
+  ],
+  "params": {
+    "prompt": {
+      "node": "27",
+      "input": "text",
+      "type": "str",
+      "default": ""
+    },
+    "seed": {
+      "node": "3",
+      "input": "seed",
+      "type": "int",
+      "default": 0
+    },
+    "steps": {
+      "node": "3",
+      "input": "steps",
+      "type": "int",
+      "default": 8
+    },
+    "width": {
+      "node": "13",
+      "input": "width",
+      "type": "int",
+      "default": 1024
+    },
+    "height": {
+      "node": "13",
+      "input": "height",
+      "type": "int",
+      "default": 1024
+    }
+  },
+  "outputs": {
+    "image": "9",
+    "mask": "42"
+  },
+  "graph": {
+    "28": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "z_image_turbo_int8_convrot.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    "30": {
+      "class_type": "CLIPLoader",
+      "inputs": {
+        "clip_name": "qwen_3_4b_fp8_mixed.safetensors",
+        "type": "lumina2",
+        "device": "default"
+      }
+    },
+    "29": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "ae.safetensors"
+      }
+    },
+    "11": {
+      "class_type": "ModelSamplingAuraFlow",
+      "inputs": {
+        "model": [
+          "28",
+          0
+        ],
+        "shift": 3
+      }
+    },
+    "27": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "",
+        "clip": [
+          "30",
+          0
+        ]
+      }
+    },
+    "33": {
+      "class_type": "ConditioningZeroOut",
+      "inputs": {
+        "conditioning": [
+          "27",
+          0
+        ]
+      }
+    },
+    "13": {
+      "class_type": "EmptySD3LatentImage",
+      "inputs": {
+        "width": 1024,
+        "height": 1024,
+        "batch_size": 1
+      }
+    },
+    "3": {
+      "class_type": "KSampler",
+      "inputs": {
+        "seed": 0,
+        "steps": 8,
+        "cfg": 1,
+        "sampler_name": "res_multistep",
+        "scheduler": "simple",
+        "denoise": 1,
+        "model": [
+          "11",
+          0
+        ],
+        "positive": [
+          "27",
+          0
+        ],
+        "negative": [
+          "33",
+          0
+        ],
+        "latent_image": [
+          "13",
+          0
+        ]
+      }
+    },
+    "8": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": [
+          "3",
+          0
+        ],
+        "vae": [
+          "29",
+          0
+        ]
+      }
+    },
+    "9": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "images": [
+          "8",
+          0
+        ],
+        "filename_prefix": "concept"
+      }
+    },
+    "40": {
+      "class_type": "LoadBackgroundRemovalModel",
+      "inputs": {
+        "bg_removal_name": "birefnet.safetensors"
+      }
+    },
+    "41": {
+      "class_type": "RemoveBackground",
+      "inputs": {
+        "bg_removal_model": [
+          "40",
+          0
+        ],
+        "image": [
+          "8",
+          0
+        ]
+      }
+    },
+    "43": {
+      "class_type": "MaskToImage",
+      "inputs": {
+        "mask": [
+          "41",
+          0
+        ]
+      }
+    },
+    "42": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "images": [
+          "43",
+          0
+        ],
+        "filename_prefix": "mask"
+      }
+    }
+  }
+}
