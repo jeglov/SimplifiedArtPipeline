@@ -26,6 +26,29 @@ TOOL = "artpipe.gen 1.0"
 _SAFE_EXT = re.compile(r"^\.[a-z0-9]{1,8}$")
 
 
+def scrub(value: Any, swaps: Sequence[Tuple[str, str]]) -> Any:
+    """Replace this machine's folders with tokens in every string (backlog #46).
+
+    ComfyUI's exception messages and tracebacks quote absolute paths, in three
+    spellings (C:\\a\\b, C:\\\\a\\\\b in JSON-escaped text, C:/a/b) and with a
+    drive letter of either case. `swaps` is (folder, token), most specific
+    first: the ComfyUI install and the repo both sit under the home folder.
+    """
+    if isinstance(value, dict):
+        return {k: scrub(v, swaps) for k, v in value.items()}
+    if isinstance(value, list):
+        return [scrub(v, swaps) for v in value]
+    if isinstance(value, str):
+        for folder, token in swaps:
+            folder = folder.rstrip("\\/")
+            if not folder:
+                continue
+            for form in (folder.replace("\\", "\\\\"), folder, folder.replace("\\", "/")):
+                # Not inside a longer name: C:\Users\ann must not eat C:\Users\anna.
+                value = re.sub(re.escape(form) + r"(?![\w-])", lambda _m, t=token: t, value, flags=re.IGNORECASE)
+    return value
+
+
 def output_names(files: Sequence[OutputFile], wf: Workflow) -> List[Tuple[str, str, OutputFile]]:
     """(output name, local file name, ComfyUI file) for the workflow's declared outputs only.
 

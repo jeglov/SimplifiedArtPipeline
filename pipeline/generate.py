@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 from gen import cli as gen
 from gen import comfy
 from gen.core import ToolError
+from gen.core import manifest as mf
 from gen.core import rules as gen_rules
 from pipeline import build as bld
 
@@ -142,7 +143,7 @@ def generate(subject: str, asset_class: str, style: str, name: str,
     try:
         _, _, asset_dir = gen.ingest(str(ROOT / rec["accepted_run"]), asset_class, name, out_dir=assets)
     except (ToolError, gen_rules.ConventionError) as exc:
-        ingest = {"exit_code": 2, "message": str(exc), "record": None}
+        ingest = {"exit_code": 2, "message": mf.scrub(str(exc), gen.machine_swaps(env)), "record": None}
         return stopped_report(asset_class, "ingest", 2, generation_block(subject, style, name, stages, ingest))
     ingest = {"exit_code": 0, "message": "", "record": _file(asset_dir / "ingest.json")}
     scene = asset_dir / ("SM_%s.ma" % name)

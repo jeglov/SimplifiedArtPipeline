@@ -151,6 +151,15 @@ def test_model_tool_error_is_exit_2_and_never_reaches_maya(monkeypatch, tmp_path
     assert "ingest" not in [c[0] for c in f.calls]
 
 
+def test_a_model_handed_over_after_its_retries_never_reaches_ingest(monkeypatch, tmp_path):
+    # The crate's case: every attempt fails a retry check. Found by the step 3.8 mutation pass.
+    f = Fakes(tmp_path, model=[(1, ["model.closed"])] * 3).install(monkeypatch)
+    r = valid(run(tmp_path, f))
+    assert (r["exit_code"], r["status"], r["stopped_at"]) == (1, "fail", "model")
+    assert [c[0] for c in f.calls] == ["concept", "model"]
+    assert r["generation"]["stages"]["model"]["seeds"] == [56, 1056, 2056]
+
+
 def test_ingest_error_is_reported_with_the_message(monkeypatch, tmp_path):
     f = Fakes(tmp_path, ingest_error=ToolError("size 99 cm is outside pickup's 5-50 cm")).install(monkeypatch)
     r = valid(run(tmp_path, f))

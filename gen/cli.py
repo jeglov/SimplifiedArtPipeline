@@ -116,6 +116,17 @@ def verify_models(pins: Sequence[ModelPin], models: Optional[Path]) -> List[Tupl
     return out
 
 
+def machine_swaps(env: Mapping[str, str] = os.environ) -> List[Tuple[str, str]]:
+    """This machine's folders -> tokens for gen.core.manifest.scrub, most specific first (backlog #46)."""
+    swaps = []
+    for find, token in ((comfy.comfy_dir, "<comfyui>"), (comfy.models_dir, "<models>")):
+        try:
+            swaps.append((str(find(env)), token))
+        except ToolError:
+            pass  # not installed: nothing of it can appear in a message
+    return swaps + [(str(comfy.ROOT), "<repo>"), (str(Path.home()), "<home>")]
+
+
 def reusable(run_dir: Path) -> Optional[Dict[str, Any]]:
     """The previous manifest if that run succeeded and its files are untouched."""
     try:
@@ -207,6 +218,9 @@ def generate(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep
                            % (exc, (". Server log:\n" + crash) if crash else ""))
         except comfy.RunTimeout as exc:
             error = _error("timeout", str(exc))
+        if error is not None:
+            # Exception messages and tracebacks quote absolute paths (#46).
+            error = mf.scrub(error, machine_swaps(env))
         manifest = mf.build(wf=wf, workflow_path=report_path(wf.path), params=values, rid=rid,
                             prompt_id=prompt_id, models=models, env=env_record,
                             execution=execution, outputs=outputs, error=error, inputs=inputs)
@@ -374,11 +388,12 @@ def _outcome(call: Callable[[], Tuple[int, str, Path]], report_name: str) -> rep
     try:
         code, message, run_dir = call()
     except (ToolError, gen_rules.ConventionError, GlbError) as exc:
-        return repair.Outcome(EXIT_TOOL_ERROR, message=str(exc).strip("'\""))
+        return repair.Outcome(EXIT_TOOL_ERROR, message=mf.scrub(str(exc).strip("'\""), machine_swaps()))
     report = _read_json(run_dir / report_name) if code != EXIT_TOOL_ERROR else None
     execution = (_read_json(run_dir / "manifest.json") or {}).get("execution") or {}
     return repair.Outcome(code, report, report_path(run_dir / report_name) if report else None,
-                          report_path(run_dir), execution.get("seconds"), "(reused)" in message, message)
+                          report_path(run_dir), execution.get("seconds"), "(reused)" in message,
+                          mf.scrub(message, machine_swaps()))
 
 
 def _read_json(path: Path) -> Optional[Dict[str, Any]]:

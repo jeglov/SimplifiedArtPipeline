@@ -29,7 +29,7 @@ CUBE_T = [(0, 2, 1), (0, 3, 2), (4, 5, 6), (4, 6, 7), (0, 1, 5), (0, 5, 4),
 
 
 def glb_bytes(vertices=CUBE_V, triangles=CUBE_T, uvs=True, node=None, textures=True, mode=4,
-              index_type=5125, indices=True, version=2):
+              index_type=5125, indices=True, version=2, normal_map=True):
     binary = b"".join(struct.pack("<3f", *v) for v in vertices)
     views = [{"buffer": 0, "byteOffset": 0, "byteLength": len(binary)}]
     accessors = [{"bufferView": 0, "componentType": 5126, "count": len(vertices), "type": "VEC3"}]
@@ -60,8 +60,10 @@ def glb_bytes(vertices=CUBE_V, triangles=CUBE_T, uvs=True, node=None, textures=T
             views.append({"buffer": 0, "byteOffset": len(binary), "byteLength": len(png)})
             images.append({"bufferView": len(views) - 1, "mimeType": "image/png"})
             binary += png + b"\x00" * (-len(png) % 4)
-        doc.update(images=images, textures=[{"source": 0}, {"source": 1}],
-                   materials=[{"pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}, "normalTexture": {"index": 1}}])
+        material = {"pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}}
+        if normal_map:
+            material["normalTexture"] = {"index": 1}
+        doc.update(images=images, textures=[{"source": 0}, {"source": 1}], materials=[material])
         prim["material"] = 0
     doc["buffers"] = [{"byteLength": len(binary)}]
     js = json.dumps(doc).encode()
@@ -176,6 +178,18 @@ def test_uv_missing_and_outside(tmp_path):
 
 def test_missing_textures_fail(tmp_path):
     assert not verdicts(read(write(tmp_path, glb_bytes(textures=False))))["model.textures"].passed
+
+
+def test_a_base_colour_without_a_normal_map_fails(tmp_path):
+    # Found by the step 3.8 mutation pass: "normal map optional" survived.
+    r = verdicts(read(write(tmp_path, glb_bytes(normal_map=False))))["model.textures"]
+    assert not r.passed and r.message == "Missing a normal map."
+
+
+def test_the_smallest_hole_fails_closed(tmp_path):
+    # Boundary: one missing triangle (3 open edges) is the smallest hole a mesh can have.
+    v = verdicts(read(write(tmp_path, glb_bytes(triangles=CUBE_T[:-1]))))
+    assert not v["model.closed"].passed and v["model.closed"].metrics["open_edges"] == 3
 
 
 # --- model checks: recorded TRELLIS.2 output -----------------------------------------

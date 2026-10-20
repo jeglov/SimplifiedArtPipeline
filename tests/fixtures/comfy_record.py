@@ -32,25 +32,11 @@ def graph(color=0xFF8800, prefix="record/img"):
             "2": {"class_type": "SaveImage", "inputs": {"images": ["1", 0], "filename_prefix": prefix}}}
 
 
-def scrub(value, swaps):
-    """Replace this machine's folders in every string (exception messages and
-    tracebacks quote absolute paths, some with doubled backslashes)."""
-    if isinstance(value, dict):
-        return {k: scrub(v, swaps) for k, v in value.items()}
-    if isinstance(value, list):
-        return [scrub(v, swaps) for v in value]
-    if isinstance(value, str):
-        for path, token in swaps:
-            for form in (path, path.replace("\\", "\\\\"), path.replace("\\", "/")):
-                value = value.replace(form, token)
-    return value
-
-
 def save(name, data):
     # Most specific first: the ComfyUI install and the repo both sit under home.
     swaps = [(str(comfy.comfy_dir()), "<comfyui>"), (str(ROOT), "<repo>"), (str(Path.home()), "<home>")]
     OUT.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(scrub(data, swaps), indent=2, sort_keys=True) + "\n"
+    text = json.dumps(manifest.scrub(data, swaps), indent=2, sort_keys=True) + "\n"
     (OUT / name).write_text(text, encoding="utf-8")
     print("wrote", (OUT / name).relative_to(ROOT).as_posix())
 

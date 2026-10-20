@@ -276,3 +276,11 @@ def test_bad_policies_fail_at_load(repair_section, match):
             "repair": repair_section}
     with pytest.raises(ConventionError, match=match):
         gr.parse(data)
+
+
+def test_tool_error_messages_in_the_record_carry_no_machine_paths(monkeypatch, tmp_path, no_server):
+    missing = str(cli.comfy.ROOT / "models" / "x.safetensors")
+    monkeypatch.setattr(cli, "model", FakeStage(tmp_path, [ToolError("model x missing: %s" % missing)]))
+    _, _, rec = cli.model_repaired(str(write_image(tmp_path)), "pickup", 56, tmp_path / "runs")
+    message = rec["attempts"][0]["message"]
+    assert str(cli.comfy.ROOT) not in message and message.startswith("model x missing: <repo>")

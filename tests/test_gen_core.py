@@ -380,3 +380,33 @@ def test_schema_rejects_a_bad_run_id_and_unknown_fields():
     m["run_id"] = "smoke_empty_image-XYZ"
     m["extra"] = 1
     assert len(list(VALIDATOR.iter_errors(m))) == 2
+
+
+# --- scrubbing machine paths (backlog #46) ----------------------------------------------
+
+SWAPS = [(r"C:\Users\ann\AppData\Local\Comfy-Desktop\ComfyUI-Installs\ComfyUI\ComfyUI", "<comfyui>"),
+         (r"C:\Users\ann\Projects\ArtPipeline", "<repo>"), (r"C:\Users\ann", "<home>")]
+
+
+@pytest.mark.parametrize("raw, clean", [
+    # ComfyUI's PIL error, as recorded: the input file under our work folder
+    (r"cannot identify image file 'C:\Users\ann\Projects\ArtPipeline\out\gen\comfy\input\ab.png'",
+     r"cannot identify image file '<repo>\out\gen\comfy\input\ab.png'"),
+    # JSON-escaped (doubled backslashes) and forward slashes
+    (r"File \"C:\\Users\\ann\\AppData\\Local\\Comfy-Desktop\\ComfyUI-Installs\\ComfyUI\\ComfyUI\\nodes.py\"",
+     r"File \"<comfyui>\\nodes.py\""),
+    ("C:/Users/ann/Projects/ArtPipeline/out/x.glb", "<repo>/out/x.glb"),
+    # drive letter case, the most specific folder first, the home folder last
+    (r"c:\users\ann\Projects\ArtPipeline\a and C:\Users\ann\Documents\b", r"<repo>\a and <home>\Documents\b"),
+    # boundary: a longer user name is not this user's home
+    (r"C:\Users\anna\file.txt", r"C:\Users\anna\file.txt"),
+])
+def test_scrub_replaces_every_spelling_of_this_machines_folders(raw, clean):
+    assert mf.scrub(raw, SWAPS) == clean
+
+
+def test_scrub_walks_nested_values_and_leaves_other_types():
+    data = {"error": {"message": r"C:\Users\ann\x", "node": None, "n": 3}, "list": [r"C:\Users\ann\y"]}
+    assert mf.scrub(data, SWAPS) == {"error": {"message": r"<home>\x", "node": None, "n": 3},
+                                     "list": [r"<home>\y"]}
+    assert mf.scrub(r"C:\Users\ann\x", [("", "<nothing>")]) == r"C:\Users\ann\x"

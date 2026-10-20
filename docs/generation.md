@@ -2,8 +2,10 @@
 
 Phase 3 turns a text prompt into a game-ready asset: concept image, then
 image-to-3D, then the same Maya validate, export and Unity gate path as a
-hand-made asset. This page grows step by step: the ComfyUI setup, the API
-behaviours the harness is built on, and the harness itself.
+hand-made asset, in one command (`artpipe generate`). This page holds the
+ComfyUI setup, the API behaviours the harness is built on (each probed), every
+stage with its checks, the repair loop, and measurements on a laptop RTX 3070
+(8 GB). What the checks still can't see is listed at the end.
 
 ## Models and licences
 
@@ -23,8 +25,9 @@ Ruled out: Hunyuan3D 2.x (licence territory excludes the EU, the UK and South
 Korea), Stable Fast 3D (free only under US $1M revenue), FLUX.1-dev
 (non-commercial), paid APIs (no budget for this phase). Every component
 (image encoder, background remover, text encoder) has its own licence and goes
-into the provenance record. TRELLIS.2 on 8 GB VRAM is not confirmed yet; it is
-probed before step 3.4 builds on it.
+into the provenance record. TRELLIS.2 fits 8 GB VRAM (probed in step 3.4:
+peak 7.96 GB, with ComfyUI's dynamic VRAM offloading), so Comfy Cloud, the
+agreed fallback, was not needed.
 
 ## ComfyUI setup
 
@@ -119,8 +122,16 @@ standard library only** (`urllib`, no websocket package):
   `server.log`) in the run's manifest, exits 2, and the repair loop stops:
   the same request, rerun, went through (backlog #55).
 
-Still to probe with a real model in step 3.4: out of memory on 8 GB, and
-`SaveGLB`'s output entry (the `"3d"` key is read from ComfyUI's source).
+* Probed with the real models in step 3.4: no out-of-memory on 8 GB (dynamic
+  VRAM offloading keeps the peak at 7.96 GB, at the cost of time), and
+  `SaveGLB` reports its file in `history` under the `"3d"` output key, read
+  like any other output.
+* **Error messages quote machine paths** (`C:\Users\...`, sometimes with
+  doubled backslashes). Every message written to a manifest, a repair record
+  or a build report goes through `gen.core.manifest.scrub` first: the ComfyUI
+  install, the model folder, the repo and the home folder become
+  `<comfyui>`, `<models>`, `<repo>`, `<home>` (backlog #46). The fixture
+  recorder uses the same function.
 
 ## The harness: `artpipe gen`
 
@@ -320,7 +331,8 @@ the ordinary path takes over: generated assets get no shortcut.
   the FBX material by name to a shared `Assets/Art/Materials/M_<Name>.mat`
   and never reads textures from the FBX. Probed: file texture nodes make the
   FBX exporter write absolute paths, and the canonical export refuses them
-  (fails closed, as designed in Phase 2). Creating that `.mat` is backlog #49.
+  (fails closed, as designed in Phase 2). The Unity import creates that `.mat`
+  from the textures (step 3.7, below).
 
 End to end, the gem (pickup) and the cone (prop_small) pass Maya and Unity:
 the gem's interior shell is deleted by the winding fix (270 -> 152
@@ -466,3 +478,46 @@ and escalating to a new concept is #53.
 The first potion attempt also found a harness bug: ComfyUI crashed
 mid-run (see "The server can die mid-run" above) and the harness raised a
 Python traceback. It is now a recorded tool error.
+
+## What the checks can't see yet
+
+Generated assets that pass every check reach Unity; three ways that is still
+not enough, each with a measured example and a backlog item:
+
+| Gap | Seen on | Backlog |
+|---|---|---|
+| The concept is a flat 2D drawing, not a shaded object | potion: 191 fragments after image-to-3D | #48 (vision-model review) |
+| The bake doesn't look like the concept | mushroom: spots blurred into smudges at 128 px | #56 (texture fidelity), #50 (UV usage) |
+| A seed can't fix structural failures | crate: thin slats fold in UV at every seed | #53 (escalation in the repair policy) |
+
+So the pipeline is built to let a human review cheaply rather than never: the
+contact sheet (concept + three views per attempt) and the build report's
+`generation` block are what a reviewer reads, and the first assets of a new
+style should be approved by eye.
+
+## Tests
+
+`artpipe test -m "not maya and not unity and not comfy"` runs the generation
+logic in seconds on recorded ComfyUI replies and synthetic GLBs, images and
+masks: `test_gen_core.py` (workflows, manifests, scrubbing),
+`test_gen_runner.py` (the harness against a fake server: reuse, refusal,
+crash, timeout), `test_gen_concept.py`, `test_glb_model.py`,
+`test_winding_texel_ingest.py`, `test_gen_repair.py` (policy, records, the
+loop around the CLI), `test_generate.py` (the four-stage orchestration and
+the report contract). `tests/unity_editor/test_shared_materials.py` proves
+#49 on the real Editor, and `tests/generation/` runs the real ComfyUI.
+
+**Mutation pass (step 3.8, `artpipe py tests/mutation_gen.py`, ~1 min,
+exit 1 if a mutant survives)**: 18 bugs planted one at a time in the model
+checks, ingest, winding and texel logic, the repair policy, the orchestration
+and the scrubbing. 15 failed the suite at once. The 3 that survived showed
+missing tests, now added, and all 18 fail it now: the smallest possible hole
+(3 open edges), a base colour without a normal map, and a model handed over
+after its retries going on to ingest (only the tool-error stop was tested).
+
+Probed on the way: **a mutation runner must not let Python cache
+bytecode.** A `.pyc` is trusted when the source's size and whole-second
+mtime match, so restoring the source within the same second as a
+same-length mutant (`< 3` -> `< 2`) left the mutant running in the next
+full suite, and on the first pass it hid one survivor. The runner now sets
+`PYTHONDONTWRITEBYTECODE=1`.

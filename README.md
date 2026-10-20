@@ -142,6 +142,6 @@ Known gaps and deferred work are tracked in [docs/backlog.md](docs/backlog.md).
 
 1. **Conventions + Maya validators**: done
 2. **Unity import pipeline**: done (gate, import rules, GPU budgets, textures, batchmode, end to end)
-3. **AI generation stage**: in progress. Text to concept image to TRELLIS.2 mesh to Maya to Unity works end to end in one command (`artpipe generate`), with a bounded repair loop and the provenance in the build report
+3. **AI generation stage**: done. Text to concept image to TRELLIS.2 mesh to Maya to Unity works end to end in one command (`artpipe generate`), with a bounded repair loop and the provenance in the build report
 4. Animated store banners at scale: one template → many games
 5. MCP agent layer + docs + demo video

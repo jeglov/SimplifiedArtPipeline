@@ -326,3 +326,27 @@ def test_comfy_dir_and_models_dir_explain_the_env_vars(tmp_path):
         comfy.comfy_dir({"ARTPIPE_COMFYUI": str(tmp_path)})
     with pytest.raises(ToolError, match="ARTPIPE_COMFY_MODELS"):
         comfy.models_dir({"ARTPIPE_COMFY_MODELS": str(tmp_path / "none")})
+
+
+def test_error_messages_in_the_manifest_carry_no_machine_paths(monkeypatch, tmp_path):
+    # Backlog #46: ComfyUI's messages quote absolute paths; manifests must be shareable.
+    where = str(comfy.ROOT / "out" / "gen" / "comfy" / "input" / "ab.png")
+    FakeServer(crash=comfy.ServerLost("lost while reading %s and %s" % (where, where.replace("\\", "/")))
+               ).install(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli.comfy, "WORK", tmp_path)
+    run(tmp_path)
+    message = manifest(tmp_path)["error"]["message"]
+    assert str(comfy.ROOT) not in message and str(comfy.ROOT).replace("\\", "/") not in message
+    assert message.count("<repo>") == 2 and str(Path.home()) not in message
+
+
+def test_machine_swaps_put_the_most_specific_folder_first(tmp_path):
+    (tmp_path / "ComfyUI").mkdir()
+    (tmp_path / "ComfyUI" / "main.py").write_text("", encoding="utf-8")
+    (tmp_path / "models").mkdir()
+    swaps = cli.machine_swaps({"ARTPIPE_COMFYUI": str(tmp_path / "ComfyUI"),
+                               "ARTPIPE_COMFY_MODELS": str(tmp_path / "models")})
+    assert [t for _, t in swaps] == ["<comfyui>", "<models>", "<repo>", "<home>"]
+    # ComfyUI not installed: only the folders that exist are swapped
+    assert [t for _, t in cli.machine_swaps({"ARTPIPE_COMFYUI": str(tmp_path / "none"),
+                                             "ARTPIPE_COMFY_MODELS": str(tmp_path / "none")})] == ["<repo>", "<home>"]
