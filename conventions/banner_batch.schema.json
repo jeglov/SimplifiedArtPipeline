@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://artpipe.local/conventions/banner_batch.schema.json",
+  "title": "Banner batch summary (banners/batch.py)",
+  "description": "out/banners/batch/<template>.batch.json: one template x games x placements x locales; per kit and per banner status, reuse, the batch-level distinct check, and the summary.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tool", "template", "games", "placements", "locales", "repair", "exit_code", "kits", "banners", "distinct", "sheet", "summary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "tool": {"const": "artpipe.banners.batch"},
+    "template": {"type": "string"},
+    "games": {"type": "array", "items": {"type": "string"}},
+    "placements": {"type": "array", "items": {"type": "string"}},
+    "locales": {"type": "array", "items": {"type": "string"}},
+    "repair": {"type": "boolean"},
+    "exit_code": {"enum": [0, 1, 2]},
+    "kits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kit", "status", "report"],
+        "properties": {
+          "kit": {"type": "string"},
+          "status": {"enum": ["pass", "fail", "error"]},
+          "report": {"type": ["string", "null"]},
+          "failed": {"type": "array", "items": {"type": "string"}},
+          "message": {"type": "string"}
+        }
+      }
+    },
+    "banners": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kit", "placement", "locale", "status", "reused", "failed", "warnings", "renders", "seconds"],
+        "properties": {
+          "kit": {"type": "string"},
+          "placement": {"type": "string"},
+          "locale": {"type": "string"},
+          "status": {"enum": ["pass", "handed_over", "error", "skipped"]},
+          "reused": {"type": "boolean"},
+          "failed": {"type": "array", "items": {"type": "string"}},
+          "warnings": {"type": "array", "items": {"type": "string"}},
+          "renders": {"type": "integer", "minimum": 0},
+          "seconds": {"type": "number", "minimum": 0},
+          "folder": {"type": "string"},
+          "report": {"type": "string"},
+          "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "mp4_sha256": {"type": "string"},
+          "message": {"type": "string"}
+        }
+      }
+    },
+    "distinct": {
+      "type": "object",
+      "required": ["id", "severity", "passed", "min_distance", "pairs_compared", "pairs", "message"],
+      "properties": {
+        "id": {"const": "batch.distinct"},
+        "severity": {"const": "warning"},
+        "passed": {"type": "boolean"},
+        "min_distance": {"type": "number"},
+        "pairs_compared": {"type": "integer"},
+        "pairs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["a", "b", "distance", "placement", "locale"],
+            "properties": {"a": {"type": "string"}, "b": {"type": "string"}, "distance": {"type": "number"},
+                           "placement": {"type": "string"}, "locale": {"type": "string"}}
+          }
+        },
+        "message": {"type": "string"}
+      }
+    },
+    "sheet": {"type": ["string", "null"]},
+    "summary": {
+      "type": "object",
+      "required": ["banners", "passed", "handed_over", "errors", "skipped", "reused", "repaired", "kits_failed", "failures_by_check", "similar_games", "seconds", "render_seconds"],
+      "properties": {
+        "failures_by_check": {"type": "object", "additionalProperties": {"type": "integer"}}
+      }
+    }
+  }
+}

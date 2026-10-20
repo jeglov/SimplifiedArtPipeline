@@ -320,3 +320,56 @@ on bright, None when nothing reads, label-only / both / fill-only), policy
 mistakes at load, and the loop on the real renderer: a long headline shrunk
 until it fits, cream text on a cream background recoloured (text and CTA),
 an unbreakable 47-letter CTA word handed over after one render.
+
+## At scale: the batch (step 4.7)
+
+    artpipe banners batch --template hero_endcard --games spotcap_grove[,other_game,...]
+        [--placement P ...] [--locale L ...] [--no-repair]
+
+For every game: the kit checks (a failing kit skips its banners and the
+summary says why). For every game x placement x locale: an **input hash**
+over everything that can change the banner (`banners/core/batch.py`):
+the template file, the kit (kit.yaml, every image and font by sha256), the
+placement and every rule it is checked or repaired by, the tool pins, and
+the banner code itself (every file of the `banners` package, the renderer
+script and its lockfile). Same hash, report and MP4 intact: the banner is
+**reused** (no render). Measured: the demo banner, 289 s rendered and
+repaired, 2.3 s reused.
+
+Hashing the rules and the code is deliberate: a cached "pass" under an old
+contrast threshold, or from an older renderer, is a wrong verdict. Changing
+one game's CTA re-renders only that game's banners; changing a rule
+re-renders everything (both tested).
+
+Outputs, in `out/banners/batch/`:
+
+* `<template>.batch.json` (`conventions/banner_batch.schema.json`): per kit
+  its status and report, per banner its status (`pass`, `handed_over`,
+  `error`, `skipped`), reuse, renders, seconds, failing checks and paths; the
+  summary (counts, reused, repaired, failures by check, render time).
+* `<template>.sheet.png`: one row per banner (first frame, mid hook, end
+  card), the page a UA lead skims for the whole batch.
+
+**`batch.distinct`** (warning): games whose end cards look alike, per
+placement and locale. Half the L1 distance between 64-cell colour histograms
+of the decoded last frames (0 = the same colours, 1 = none in common), under
+`checks.batch_distinct_min` (0.2). Measured on the 1 s test template:
+
+| Pair | Distance |
+|---|---|
+| Spotcap Grove vs. a clone (same assets, another id) | 0.00 |
+| Spotcap Grove vs. a flat dark-green variant (same palette, hero and logo) | 0.17: flagged, and it does read as the same game |
+| Spotcap Grove vs. a different game (blue background, pink CTA) | 0.86 |
+
+It measures colour identity only. One template means one layout for every
+game by design; that sameness is the template's choice, not something this
+check is meant to catch.
+
+Exit code: 2 on any tool error, else 1 if any kit or banner failed or was
+handed over, else 0 (`batch.distinct` is a warning).
+
+The demo covers one game in `en` (as agreed); `tests/test_banner_batch.py`
+proves the N-game path on the 1 s template with three kits (the shipped
+one, a synthetic second game, and a clone that must be flagged), reuse on a
+second run, a one-game change re-rendering only that game, a rule change
+invalidating the cache, and a broken kit being skipped.

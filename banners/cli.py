@@ -8,6 +8,9 @@
                                              one banner -> out/banners/<kit>/<template>/<placement>/<locale>/
                                              + banner.* checks -> banner.report.json in that folder
     artpipe banners check FOLDER             re-run the banner checks on a rendered banner
+    artpipe banners batch --template T --games G1,G2 [--placement P ...] [--locale L ...] [--no-repair]
+                                             every game x placement x locale, reused by input hash
+                                             -> out/banners/batch/<template>.batch.json + .sheet.png
     artpipe banners art hero KIT --from CONCEPT_RUN
     artpipe banners art background KIT --prompt P [--seed N] [--width W --height H]
     artpipe banners art logo KIT
@@ -93,6 +96,13 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     rd.add_argument("--locale", default="en")
     rd.add_argument("--repair", action="store_true", help="fix and re-render failed banners (banners.yaml repair)")
     rd.add_argument("--out", default=str(OUT))
+    bt = sub.add_parser("batch", help="every game x placement x locale, reused when unchanged")
+    bt.add_argument("--template", required=True)
+    bt.add_argument("--games", required=True, help="comma-separated kit ids")
+    bt.add_argument("--placement", action="append", default=None, help="repeatable (default: all)")
+    bt.add_argument("--locale", action="append", default=None, help="repeatable (default: en)")
+    bt.add_argument("--no-repair", action="store_true")
+    bt.add_argument("--out", default=str(OUT))
     ck = sub.add_parser("check", help="re-run the banner checks on a rendered banner folder")
     ck.add_argument("folder", help="out/banners/<kit>/<template>/<placement>/<locale>")
     a = sub.add_parser("art", help="make a kit image with its provenance sidecar")
@@ -147,6 +157,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             r = build.render_banner(rules, ctx.template, ctx.kit, ctx.fonts, args.placement, args.locale,
                                     Path(os.path.abspath(args.out)))
             return _verdict(*banner_check.check(rules, r.folder, ctx.template), sheet=r.folder / "sheet.png")
+        if args.command == "batch":
+            from banners import batch
+            code, rec, path = batch.run(rules, args.template, [g for g in args.games.split(",") if g],
+                                        args.placement or sorted(rules.placements), args.locale or DEFAULT_LOCALES,
+                                        Path(os.path.abspath(args.out)), not args.no_repair)
+            s = rec["summary"]
+            print("artpipe banners: %d banner(s): %d passed, %d handed over, %d errors, %d skipped, %d reused, "
+                  "%d repaired, %.0f s. See %s" % (s["banners"], s["passed"], s["handed_over"], s["errors"],
+                                                  s["skipped"], s["reused"], s["repaired"], s["seconds"],
+                                                  report_path(path)),
+                  file=sys.stdout if code == EXIT_OK else sys.stderr)
+            if not rec["distinct"]["passed"]:
+                print("  warning batch.distinct: %s" % rec["distinct"]["message"], file=sys.stderr)
+            return code
         if args.command == "check":
             return _verdict(*banner_check.check(rules, Path(os.path.abspath(args.folder))))
         kit_dir = kit_mod.load(args.kit).path
