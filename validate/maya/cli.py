@@ -177,50 +177,74 @@ def write_report(report: Report, out_file: Path) -> None:
                           json.dumps(report.summary(), sort_keys=True)))
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    args = parse_args(argv)
-
-    # Load conventions BEFORE starting Maya: a typo in --class should fail
-    # in under a second, not after a 20 s Maya boot.
+def _load(args):
+    """(conventions, asset class) or None after printing why (exit 2)."""
     try:
         conventions = conv.load(args.conventions)
-        asset_class = conventions.asset_class(args.asset_class)
+        return conventions, conventions.asset_class(args.asset_class)
     except (conv.ConventionError, KeyError) as exc:
         # str(KeyError) adds quotes around the message; args[0] doesn't.
         print("artpipe: %s" % exc.args[0], file=sys.stderr)
-        return EXIT_TOOL_ERROR
+        return None
 
+
+def main(argv: Optional[List[str]] = None) -> int:
+    # Load conventions BEFORE starting Maya: a typo in --class should fail
+    # in under a second, not after a 20 s Maya boot.
+    if _load(parse_args(argv)) is None:
+        return EXIT_TOOL_ERROR
     from validate.maya import session
     session.start()
     try:
-        from validate.maya import registry  # needs Maya running (checks import maya)
-        unknown = registry.unknown_override_ids(conventions)
-        if unknown:
-            print("artpipe: mesh_budgets.yaml severity_overrides name unknown checks: %s"
-                  % "; ".join(unknown), file=sys.stderr)
-            return EXIT_TOOL_ERROR
-
-        args.out.mkdir(parents=True, exist_ok=True)
-        worst = 0
-        for path in args.files:
-            fix_dir = args.fixed_dir if args.fix else None
-            report = validate_file(path, conventions, asset_class, args.max_offenders, fix_dir)
-            # Full file name, not stem: SM_Crate.ma and SM_Crate.fbx must not
-            # overwrite each other's report.
-            write_report(report, args.out / (path.name + ".report.json"))
-            worst = max(worst, report.exit_code)
-            if args.export is None:
-                continue
-            if report.exit_code != 0:
-                print("SKIP  export of %s: it did not pass" % path.name)
-                continue
-            exported = export_file(validated_file(path, report, fix_dir), report, conventions,
-                                   asset_class, args.export, args.max_offenders)
-            write_report(exported, args.export / (path.stem + ".fbx.report.json"))
-            worst = max(worst, exported.exit_code)
-        return worst
+        return run(argv)
     finally:
         session.stop()
+
+
+def list_checks() -> int:
+    """Print the check and fix registry as JSON (id, severity, fixable, description). Needs Maya running."""
+    from validate.maya import registry
+    print(json.dumps({"checks": [{"id": c.ID, "severity": c.SEVERITY.value, "fixable": c.FIXABLE,
+                                  "description": c.DESCRIPTION} for c in registry.CHECKS],
+                      "fixes": [{"id": f.ID, "description": f.DESCRIPTION} for f in registry.FIXES]},
+                     sort_keys=True))
+    return 0
+
+
+def run(argv: Optional[List[str]] = None) -> int:
+    """The validate command in an already running Maya: what main() runs, and what the
+    persistent worker (validate/maya/worker.py) runs for every request."""
+    args = parse_args(argv)
+    loaded = _load(args)
+    if loaded is None:
+        return EXIT_TOOL_ERROR
+    conventions, asset_class = loaded
+    from validate.maya import registry  # needs Maya running (checks import maya)
+    unknown = registry.unknown_override_ids(conventions)
+    if unknown:
+        print("artpipe: mesh_budgets.yaml severity_overrides name unknown checks: %s"
+              % "; ".join(unknown), file=sys.stderr)
+        return EXIT_TOOL_ERROR
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    worst = 0
+    for path in args.files:
+        fix_dir = args.fixed_dir if args.fix else None
+        report = validate_file(path, conventions, asset_class, args.max_offenders, fix_dir)
+        # Full file name, not stem: SM_Crate.ma and SM_Crate.fbx must not
+        # overwrite each other's report.
+        write_report(report, args.out / (path.name + ".report.json"))
+        worst = max(worst, report.exit_code)
+        if args.export is None:
+            continue
+        if report.exit_code != 0:
+            print("SKIP  export of %s: it did not pass" % path.name)
+            continue
+        exported = export_file(validated_file(path, report, fix_dir), report, conventions,
+                               asset_class, args.export, args.max_offenders)
+        write_report(exported, args.export / (path.stem + ".fbx.report.json"))
+        worst = max(worst, exported.exit_code)
+    return worst
 
 
 if __name__ == "__main__":

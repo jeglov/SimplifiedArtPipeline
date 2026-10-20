@@ -5,6 +5,7 @@
     artpipe agent serve      the MCP server over stdio (artpipe.cmd runs it in the venv, not here)
     artpipe agent jobs       JSON: every job (out/agent/jobs/) with its state
     artpipe agent job-run ID run a queued job to the end (the MCP server starts this, detached)
+    artpipe agent maya-worker start|stop|status   the persistent Maya worker (validate/maya/worker.py)
 
 Exit codes: 0 ok / 2 tool error.
 """
@@ -100,8 +101,8 @@ def setup(rules, env: Mapping[str, str] = os.environ) -> str:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     p = argparse.ArgumentParser(prog="artpipe agent", description=__doc__.split("\n\n")[0])
-    p.add_argument("command", choices=("setup", "status", "serve", "jobs", "job-run"))
-    p.add_argument("job_id", nargs="?")
+    p.add_argument("command", choices=("setup", "status", "serve", "jobs", "job-run", "maya-worker"))
+    p.add_argument("job_id", nargs="?", help="job-run: the job id; maya-worker: start, stop or status")
     args = p.parse_args(argv)
     try:
         rules = agent_rules.load()
@@ -112,6 +113,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if not args.job_id:
                 raise ToolError("job-run needs a job id")
             return runner.run(args.job_id)
+        if args.command == "maya-worker":
+            from agent.core import maya_worker
+            action = args.job_id or "status"
+            if action == "start":
+                info = maya_worker.start()
+                print("artpipe agent: Maya worker up (pid %d, port %d)" % (info["pid"], info["port"]))
+            elif action == "stop":
+                print("artpipe agent: %s" % ("stopped" if maya_worker.stop() else "no worker running"))
+            else:
+                info = maya_worker.alive()
+                print(json.dumps({"running": info is not None,
+                                  "pid": info and info["pid"], "port": info and info["port"]}))
+            return 0
         if args.command == "jobs":
             from agent.core import jobs
             print(json.dumps(jobs.list_jobs(), indent=2, sort_keys=True))

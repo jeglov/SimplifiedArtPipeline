@@ -121,3 +121,39 @@ codes, timeout, cancel while running and while queued, FIFO without overlap,
 lost, stale lock, refused syntax, the schema), and over MCP
 (`tests/test_agent_server.py`: a render job that survives a server restart;
 under `comfy`, a GPU job's progress).
+
+## The persistent Maya worker (step 5.3, backlog #1)
+
+`validate/maya/worker.py` boots Maya once and validates file after file;
+`agent/core/maya_worker.py` is its client (start on first use, ping, call,
+restart once if it died). `artpipe agent maya-worker start|stop|status` for
+a human.
+
+* **Channel**: localhost TCP, one JSON line per request and reply. Not
+  stdout: Maya prints its own noise there.
+* **Token**: the worker writes `out/agent/maya_worker.json` (pid, port, a
+  random token); a request without the token is refused, so another local
+  process can't drive Maya.
+* **Same code path**: `validate.maya.cli` is split into `main()` (starts
+  and stops Maya) and `run()` (the command in a running Maya); the worker
+  runs `run()` for every request, and every file opens into a fresh scene.
+  argparse errors and crashes become exit 2 replies; the worker lives on.
+* **Lifetime**: one request at a time (Maya isn't thread-safe), exits after
+  `--idle-s` (15 min default). Spawned like a job runner (WMI inside a Job
+  Object), so it outlives the MCP session that started it.
+
+Measured on SM_Messy.ma:
+
+| | Time |
+|---|---|
+| cold `artpipe validate` | 4.6 s today (21 s when backlog #1 was written, on a cold disk cache) |
+| worker boot (once) | 4.9 s |
+| warm validate | 0.04-0.12 s round trip |
+| warm validate + fix + export (FBX re-validated) | 0.54 s |
+
+Proven (`tests/test_maya_worker.py`, marker `maya`): the worker writes the
+same report bytes as the cold CLI; fix + export give the same `.ma` and FBX
+bytes (reports identical once their own output folder is normalised); a
+clean / messy / clean sequence doesn't leak state (first and last reports
+identical); a bad token is refused; an argparse error doesn't kill it; a
+killed worker is restarted on the next call.
