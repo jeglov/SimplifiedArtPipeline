@@ -1,0 +1,16 @@
+{
+  "id": "smoke_empty_image",
+  "description": "Model-free smoke test of the harness: a flat-colour 64x64 PNG. Proves start, queue, history, download and manifest without a GPU model, and is byte-deterministic (no sampler).",
+  "models": [],
+  "params": {
+    "color": {"node": "1", "input": "color", "type": "int", "default": 16746496},
+    "size": {"node": "1", "input": "width", "type": "int", "default": 64}
+  },
+  "outputs": {"image": "2"},
+  "graph": {
+    "1": {"class_type": "EmptyImage",
+          "inputs": {"width": 64, "height": 64, "batch_size": 1, "color": 16746496}},
+    "2": {"class_type": "SaveImage",
+          "inputs": {"images": ["1", 0], "filename_prefix": "smoke"}}
+  }
+}

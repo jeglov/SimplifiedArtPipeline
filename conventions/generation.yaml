@@ -1,0 +1,24 @@
+# Generation stage (Phase 3): the pinned generator and the models it may use.
+#
+# Read by gen/core/rules.py. Python only: Unity never sees generated files
+# before they pass the Maya stage, so this file is not in conventions.lock.json.
+version: 1
+
+comfyui:
+  # A ComfyUI update changes outputs, so the pipeline refuses any other build.
+  # Updating is a deliberate step: change both lines, re-run `artpipe test`,
+  # re-record the generator fixtures.
+  version: "0.42.1"
+  commit: 63be2f9b82ad0dac88a7ceaa28a9cf3154125a18
+  port: 8188
+  # Cold start measured at ~15 s; generous for a first CUDA init or a busy disk.
+  startup_timeout_s: 180
+  # One queued graph. Image-to-3D at 8 GB VRAM may take minutes.
+  run_timeout_s: 1800
+
+# Every model a workflow may load, pinned by sha256 and with its licence.
+# A workflow names models by id; the run refuses a file whose hash differs
+# (a re-downloaded or swapped file changes outputs without changing its name).
+#   <id>: {folder: <ComfyUI model folder>, file: <name>, sha256: <hex>,
+#          licence: <SPDX id or name>, source: <download URL>}
+models: {}

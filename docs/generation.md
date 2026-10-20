@@ -2,8 +2,8 @@
 
 Phase 3 turns a text prompt into a game-ready asset: concept image, then
 image-to-3D, then the same Maya validate, export and Unity gate path as a
-hand-made asset. This page grows step by step; today it records the ComfyUI
-setup and the API behaviours the harness is built on.
+hand-made asset. This page grows step by step: the ComfyUI setup, the API
+behaviours the harness is built on, and the harness itself.
 
 ## Models and licences
 
@@ -68,8 +68,9 @@ standard library only** (`urllib`, no websocket package):
   run and copies outputs into its own run folder.
 * **`SaveImage` embeds the whole API graph in a PNG `tEXt` chunk (`prompt`)**.
   The file hash then depends on the prefix and every input, not only the
-  pixels. The harness will run with `--disable-metadata` and keep provenance
-  in its own manifest (to be confirmed in step 3.2).
+  pixels. The pipeline's server runs with `--disable-metadata` (the 64 px
+  smoke PNG drops from 381 to 158 bytes, no text chunk left) and provenance
+  lives in the manifest. A live test fails if the flag disappears.
 * Invalid graphs are refused **before** running with HTTP 400 and structured
   JSON: `error.type` (`prompt_outputs_failed_validation`, `missing_node_type`)
   plus `node_errors[node_id].errors[]` with a `type` such as
@@ -91,6 +92,60 @@ standard library only** (`urllib`, no websocket package):
 * `--deterministic` exists, but its own help says it "might not make images
   deterministic in all cases": the model is the one nondeterministic step.
 
-Not probed yet: a failure **during** execution (out of memory, a missing model
-caught at run time) and what `history` reports for it. Step 3.4 probes it with
-a real model, since out of memory is the realistic failure on 8 GB.
+* A failure **during** execution (probed with a corrupt PNG in `LoadImage`,
+  which passes validation because only the file's existence is checked):
+  `status_str` is `"error"`, `completed` false, no outputs, and an
+  `execution_error` message with `node_id`, `node_type`, `exception_type`
+  (`PIL.UnidentifiedImageError`), `exception_message`, a traceback, and
+  `executed`: the nodes that finished before it. Nodes after the failing one
+  never start. Messages and tracebacks quote absolute paths.
+* The same graph gives **identical bytes after a server restart** (no
+  in-memory cache, so it really runs twice). True for the model-free smoke
+  graph; for a sampler on a GPU it is exactly what can't be promised.
+
+Still to probe with a real model in step 3.4: out of memory on 8 GB, and
+`SaveGLB`'s output entry (the `"3d"` key is read from ComfyUI's source).
+
+## The harness: `artpipe gen`
+
+```
+artpipe gen run smoke_empty_image --param size 32
+# artpipe gen: OK out/gen/runs/smoke_empty_image-1a2b3c4d5e6f/manifest.json
+artpipe gen server start|stop|status
+```
+
+* **Workflows** live in `gen/workflows/<id>.json`: an API-format graph plus
+  the params the pipeline may change (`node`, `input`, `type`, `default`),
+  the pinned models it loads, and its output (save) nodes. Any string in the
+  graph that looks like a model file (`.safetensors`, `.gguf`...) must be a
+  declared model, so nothing loads unhashed.
+* **Models** are pinned in `conventions/generation.yaml` by sha256, with their
+  licence and download source. A run hashes each file (cached by size and
+  mtime: a 6 GB file isn't re-read every run) and refuses a mismatch.
+* **ComfyUI** is pinned by version *and* git commit, read from `.git` without
+  needing git, and refused if tracked files were edited.
+* **Run id** = `<workflow>-<12 hex>`: a hash of the filled graph (params,
+  seeds, prompts), the model hashes and the ComfyUI commit. Not the GPU,
+  driver or torch build: they change pixels too, but a run id is "what was
+  asked"; they are recorded in the manifest. If `out/gen/runs/<run_id>/`
+  holds a successful manifest whose files still match their sha256, the run
+  is reused without starting ComfyUI.
+* **Outputs** go through a per-run prefix (`artpipe/<run_id>/<name>`), are
+  located through `/history` only, downloaded through `/view`, and saved as
+  `<name>.<ext>`.
+* **Manifest** (`conventions/gen_manifest.schema.json`): status, error, workflow
+  and its sha256, every param value, models with hash and licence, outputs
+  with sha256, environment (ComfyUI version and commit, Python, torch, GPU,
+  VRAM, driver, server flags with paths hidden) and execution (prompt id,
+  start time, seconds, executed and cached nodes). A refused or failed run
+  writes one too: every attempt is on record.
+* **Exit codes**: 0 files generated, 2 tool error. 1 belongs to the checks
+  that judge the outputs (step 3.3 on).
+* `--param NAME VALUE`, not `NAME=VALUE`: `artpipe.cmd` is a batch file, and
+  batch splits arguments on `=` (probed: `color=255` arrived as two arguments).
+
+Tests: `tests/test_gen_core.py` and `tests/test_gen_runner.py` run in under a
+second on ComfyUI replies recorded from the real server
+(`tests/fixtures/comfy/`, refreshed by `artpipe py
+tests/fixtures/comfy_record.py`, machine paths scrubbed).
+`tests/generation/` (marker `comfy`) runs the real server.

@@ -9,6 +9,8 @@ rem   artpipe test [PYTEST_ARGS]          run the test suite
 rem   artpipe docs [--check]              regenerate the tables in docs\conventions.md
 rem   artpipe conventions --dump^|--check  write / verify conventions\conventions.lock.json
 rem   artpipe unity setup^|import^|test     run the Unity project headless (pipeline\unity.py)
+rem   artpipe gen run WORKFLOW [--param K V]  generate on the pinned ComfyUI, with a provenance manifest
+rem   artpipe gen server start^|stop^|status   the pipeline's headless ComfyUI (gen\cli.py)
 rem   artpipe py [ARGS]                   raw mayapy, e.g. "artpipe py -m pip list"
 rem
 rem mayapy comes from %MAYAPY% if set, otherwise the newest installed
@@ -56,12 +58,13 @@ if /i "%CMD%"=="unity-fixtures" "%MAYAPY%" "%ROOT%\tests\fixtures\unity_fixtures
 if /i "%CMD%"=="docs" "%MAYAPY%" -m validate.maya.gen_docs %ARGS% & goto done
 if /i "%CMD%"=="conventions" "%MAYAPY%" -m validate.core.lock %ARGS% & goto done
 if /i "%CMD%"=="unity" "%MAYAPY%" -m pipeline.unity %ARGS% & goto done
+if /i "%CMD%"=="gen" "%MAYAPY%" -m gen.cli %ARGS% & goto done
 if /i "%CMD%"=="test" "%MAYAPY%" -m pytest -q "%ROOT%\tests" %ARGS% & goto done
 if /i "%CMD%"=="py" "%MAYAPY%" %ARGS% & goto done
 echo artpipe: unknown command "%CMD%" 1>&2
 
 :usage
-echo usage: artpipe build^|validate^|fixtures^|unity-fixtures^|test^|docs^|conventions^|unity^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
+echo usage: artpipe build^|gen^|validate^|fixtures^|unity-fixtures^|test^|docs^|conventions^|unity^|py [ARGS]   (see the header of artpipe.cmd) 1>&2
 exit /b 2
 
 :done

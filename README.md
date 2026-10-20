@@ -70,8 +70,8 @@ Android Build Support. The code stays Python 3.9-compatible.
 .\artpipe.cmd unity setup                                           # once: URP, Linear, text assets
 .\artpipe.cmd fixtures                                              # build 45 test scenes into out\fixtures
 .\artpipe.cmd build out\fixtures\SM_Messy.ma --class prop_small     # Maya -> Unity prefab
-.\artpipe.cmd test                                                  # ~480 tests, ~4.5 min (close the Unity Editor first)
-.\artpipe.cmd test -m "not maya and not unity"                      # pure Python only, ~2 s, any Python
+.\artpipe.cmd test                                                  # ~570 tests, ~4.5 min (close the Unity Editor first)
+.\artpipe.cmd test -m "not maya and not unity and not comfy"        # pure Python only, ~3 s, any Python
 ```
 
 `artpipe.cmd` finds `mayapy` (`%MAYAPY%` or the newest Maya). The Unity
@@ -84,10 +84,12 @@ runner uses the exact version pinned in `unity/ProjectSettings` (or `%UNITY%`).
 | `artpipe unity import --class C FILE...` | Unity stage only: gate each FBX before it enters `Assets/Art/C/`, import with the class rules, measure, create the Prefab Variant |
 | `artpipe unity verify` | re-check every asset under `Assets/Art` from the files, with no import cache |
 | `artpipe unity setup\|test` | one-time project setup; Unity EditMode tests |
+| `artpipe gen run WORKFLOW [--param NAME VALUE ...]` | generation stage: run a workflow from `gen/workflows/` on the pinned, headless ComfyUI; outputs plus a provenance manifest in `out/gen/runs/<run_id>/` |
+| `artpipe gen server start\|stop\|status` | the pipeline's own ComfyUI server (keep it up for a batch: startup is ~15 s) |
 | `artpipe conventions --dump\|--check` | write / verify `conventions/conventions.lock.json` |
 | `artpipe docs [--check]` | regenerate the tables in the docs |
 | `artpipe fixtures [DIR]` / `artpipe unity-fixtures` | build the broken test scenes / the golden FBX + reports the Unity tests import |
-| `artpipe test [-m "not maya and not unity"]` | the suite (Python, Maya, real Unity runs) |
+| `artpipe test [-m "not maya and not unity and not comfy"]` | the suite (Python, Maya, real Unity and ComfyUI runs) |
 
 ## Layout
 
@@ -95,13 +97,14 @@ runner uses the exact version pinned in `unity/ProjectSettings` (or `%UNITY%`).
 conventions/                 the rules and the report contracts (YAML / JSON Schema)
 validate/core/               pure Python: rule loader, lock, report types, FBX + .ma canonicalizers
 validate/maya/               headless Maya: CLI, session, checks/, fixes/, FBX export
+gen/                         generation: core/ (pure: rules, workflows, ComfyUI replies, manifest), comfy.py (server + HTTP), cli.py, workflows/
 pipeline/                    unity.py (batchmode runner, exit-code reconciliation), build.py (end to end)
 unity/                       Unity 6 URP project (Assets/Art is where imported assets go)
 unity/Packages/com.artpipe.importer/
   Editor/                    gate, ModelImporter/TextureImporter rules, GPU checks, batchmode CLI
   Tests/Editor/              EditMode tests + Fixtures~ (golden FBX + reports)
-tests/                       pure-Python tests, integration/ (mayapy), unity_editor/ (real Unity runs)
-docs/                        conventions.md, unity_import.md, backlog.md
+tests/                       pure-Python tests, integration/ (mayapy), unity_editor/ (real Unity runs), generation/ (real ComfyUI)
+docs/                        conventions.md, unity_import.md, generation.md, backlog.md
 ```
 
 ## Design choices
@@ -134,6 +137,6 @@ Known gaps and deferred work are tracked in [docs/backlog.md](docs/backlog.md).
 
 1. **Conventions + Maya validators**: done
 2. **Unity import pipeline**: done (gate, import rules, GPU budgets, textures, batchmode, end to end)
-3. AI generation stage: ComfyUI, image → 3D
+3. **AI generation stage**: in progress. ComfyUI is pinned and driven headless, with a provenance manifest per run; next: concept image, image → 3D, Maya ingest
 4. Animated store banners at scale: one template → many games
 5. MCP agent layer + docs + demo video

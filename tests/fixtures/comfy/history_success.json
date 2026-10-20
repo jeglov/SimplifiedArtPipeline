@@ -1,0 +1,109 @@
+{
+  "entry": {
+    "meta": {
+      "2": {
+        "display_node": "2",
+        "node_id": "2",
+        "parent_node": null,
+        "real_node_id": "2"
+      }
+    },
+    "outputs": {
+      "2": {
+        "images": [
+          {
+            "filename": "img_00002_.png",
+            "metadata": {
+              "height": 64,
+              "kind": "image",
+              "width": 64
+            },
+            "subfolder": "record",
+            "type": "output"
+          }
+        ]
+      }
+    },
+    "prompt": [
+      0,
+      "e2f4804b-ca94-43a1-8905-738dfdd9882e",
+      {
+        "1": {
+          "class_type": "EmptyImage",
+          "inputs": {
+            "batch_size": 1,
+            "color": 12895726,
+            "height": 64,
+            "width": 64
+          }
+        },
+        "2": {
+          "class_type": "SaveImage",
+          "inputs": {
+            "filename_prefix": "record/img",
+            "images": [
+              "1",
+              0
+            ]
+          }
+        }
+      },
+      {
+        "client_id": "record-cc303ae64eb84c8396a4475c4e1cf3d1",
+        "create_time": 1792485347922
+      },
+      [
+        "2"
+      ]
+    ],
+    "status": {
+      "completed": true,
+      "messages": [
+        [
+          "execution_start",
+          {
+            "prompt_id": "e2f4804b-ca94-43a1-8905-738dfdd9882e",
+            "timestamp": 1792485347924
+          }
+        ],
+        [
+          "execution_cached",
+          {
+            "nodes": [],
+            "prompt_id": "e2f4804b-ca94-43a1-8905-738dfdd9882e",
+            "timestamp": 1792485347925
+          }
+        ],
+        [
+          "execution_success",
+          {
+            "prompt_id": "e2f4804b-ca94-43a1-8905-738dfdd9882e",
+            "timestamp": 1792485347938
+          }
+        ]
+      ],
+      "status_str": "success"
+    }
+  },
+  "graph": {
+    "1": {
+      "class_type": "EmptyImage",
+      "inputs": {
+        "batch_size": 1,
+        "color": 12895726,
+        "height": 64,
+        "width": 64
+      }
+    },
+    "2": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "filename_prefix": "record/img",
+        "images": [
+          "1",
+          0
+        ]
+      }
+    }
+  }
+}

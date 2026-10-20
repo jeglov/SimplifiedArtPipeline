@@ -1,0 +1,74 @@
+{
+  "devices": [
+    {
+      "index": 0,
+      "name": "cuda:0 NVIDIA GeForce RTX 3070 Laptop GPU : cudaMallocAsync",
+      "torch_vram_free": 0,
+      "torch_vram_total": 0,
+      "type": "cuda",
+      "vram_free": 7474249728,
+      "vram_total": 8589410304
+    }
+  ],
+  "system": {
+    "argv": [
+      "main.py",
+      "--listen",
+      "127.0.0.1",
+      "--port",
+      "8188",
+      "--disable-auto-launch",
+      "--disable-all-custom-nodes",
+      "--disable-metadata",
+      "--log-stdout",
+      "--extra-model-paths-config",
+      "<path>",
+      "--input-directory",
+      "<path>",
+      "--output-directory",
+      "<path>",
+      "--temp-directory",
+      "<path>",
+      "--user-directory",
+      "<path>"
+    ],
+    "comfy_package_versions": [
+      {
+        "installed": "1.55.18",
+        "name": "comfyui-frontend-package",
+        "required": "1.55.18"
+      },
+      {
+        "installed": "0.11.89",
+        "name": "comfyui-workflow-templates",
+        "required": "0.11.89"
+      },
+      {
+        "installed": "0.5.14",
+        "name": "comfyui-embedded-docs",
+        "required": "0.5.14"
+      },
+      {
+        "installed": "0.2.39",
+        "name": "comfy-kitchen",
+        "required": "0.2.39"
+      },
+      {
+        "installed": "0.5.6",
+        "name": "comfy-aimdo",
+        "required": "0.5.6"
+      }
+    ],
+    "comfyui_version": "0.42.1",
+    "deploy_environment": "local-desktop2-standalone",
+    "embedded_python": false,
+    "installed_templates_version": "0.11.89",
+    "os": "win32",
+    "python_version": "3.13.12 (main, Feb 12 2026, 00:38:53) [MSC v.1944 64 bit (AMD64)]",
+    "pytorch_version": "2.12.1+cu130",
+    "ram_free": 28035846144,
+    "ram_total": 50917900288,
+    "required_frontend_version": "1.55.18",
+    "required_templates_version": "0.11.89"
+  }
+}

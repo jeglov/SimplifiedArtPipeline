@@ -1,0 +1,104 @@
+{
+  "entry": {
+    "meta": {},
+    "outputs": {},
+    "prompt": [
+      2,
+      "d60baf11-3827-41c9-92a9-c24bc20348d9",
+      {
+        "1": {
+          "class_type": "LoadImage",
+          "inputs": {
+            "image": "artpipe_corrupt.png"
+          }
+        },
+        "2": {
+          "class_type": "SaveImage",
+          "inputs": {
+            "filename_prefix": "record/bad",
+            "images": [
+              "1",
+              0
+            ]
+          }
+        }
+      },
+      {
+        "client_id": "record-cc303ae64eb84c8396a4475c4e1cf3d1",
+        "create_time": 1792485348244
+      },
+      [
+        "2"
+      ]
+    ],
+    "status": {
+      "completed": false,
+      "messages": [
+        [
+          "execution_start",
+          {
+            "prompt_id": "d60baf11-3827-41c9-92a9-c24bc20348d9",
+            "timestamp": 1792485348245
+          }
+        ],
+        [
+          "execution_cached",
+          {
+            "nodes": [],
+            "prompt_id": "d60baf11-3827-41c9-92a9-c24bc20348d9",
+            "timestamp": 1792485348246
+          }
+        ],
+        [
+          "execution_error",
+          {
+            "current_inputs": {
+              "image": [
+                "artpipe_corrupt.png"
+              ]
+            },
+            "current_outputs": [
+              "2",
+              "1"
+            ],
+            "exception_message": "cannot identify image file '<repo>\\\\out\\\\gen\\\\comfy\\\\input\\\\artpipe_corrupt.png'\n",
+            "exception_type": "PIL.UnidentifiedImageError",
+            "executed": [],
+            "node_id": "1",
+            "node_type": "LoadImage",
+            "prompt_id": "d60baf11-3827-41c9-92a9-c24bc20348d9",
+            "timestamp": 1792485348317,
+            "traceback": [
+              "  File \"<comfyui>\\execution.py\", line 548, in execute\n    output_data, output_ui, has_subgraph, has_pending_tasks = await get_output_data(prompt_id, unique_id, obj, input_data_all, execution_block_cb=execution_block_cb, pre_execute_cb=pre_execute_cb, v3_data=v3_data)\n                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "  File \"<comfyui>\\execution.py\", line 353, in get_output_data\n    return_values = await _async_map_node_over_list(prompt_id, unique_id, obj, input_data_all, obj.FUNCTION, allow_interrupt=True, execution_block_cb=execution_block_cb, pre_execute_cb=pre_execute_cb, v3_data=v3_data)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+              "  File \"<comfyui>\\execution.py\", line 327, in _async_map_node_over_list\n    await process_inputs(input_dict, i)\n",
+              "  File \"<comfyui>\\execution.py\", line 315, in process_inputs\n    result = f(**inputs)\n",
+              "  File \"<comfyui>\\nodes.py\", line 1775, in load_image\n    img = node_helpers.pillow(Image.open, image_path)\n",
+              "  File \"<comfyui>\\node_helpers.py\", line 62, in pillow\n    x = fn(arg)\n",
+              "  File \"<comfyui>\\.venv\\Lib\\site-packages\\PIL\\Image.py\", line 3715, in open\n    raise UnidentifiedImageError(msg)\n"
+            ]
+          }
+        ]
+      ],
+      "status_str": "error"
+    }
+  },
+  "graph": {
+    "1": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": "artpipe_corrupt.png"
+      }
+    },
+    "2": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "filename_prefix": "record/bad",
+        "images": [
+          "1",
+          0
+        ]
+      }
+    }
+  }
+}

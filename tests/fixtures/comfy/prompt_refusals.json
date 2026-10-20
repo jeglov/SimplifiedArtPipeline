@@ -1,0 +1,90 @@
+{
+  "missing_link": {
+    "body": {
+      "error": {
+        "details": "Exception when validating node: '9'",
+        "extra_info": {},
+        "message": "Prompt outputs failed validation",
+        "type": "prompt_outputs_failed_validation"
+      },
+      "node_errors": {
+        "2": {
+          "class_type": "SaveImage",
+          "dependent_outputs": [
+            "2"
+          ],
+          "errors": [
+            {
+              "details": "'9'",
+              "extra_info": {
+                "exception_type": "KeyError",
+                "traceback": [
+                  "  File \"<comfyui>\\execution.py\", line 1213, in validate_prompt\n    m = await validate_inputs(prompt_id, prompt, o, validated)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+                  "  File \"<comfyui>\\execution.py\", line 946, in validate_inputs\n    o_class_type = prompt[o_id]['class_type']\n                   ~~~~~~^^^^^^\n"
+                ]
+              },
+              "message": "Exception when validating node",
+              "type": "exception_during_validation"
+            }
+          ]
+        }
+      }
+    },
+    "status": 400
+  },
+  "unknown_node": {
+    "body": {
+      "error": {
+        "details": "Node ID '#1'",
+        "extra_info": {
+          "class_type": "NoSuchNode",
+          "node_id": "1",
+          "node_title": "NoSuchNode"
+        },
+        "message": "Node 'NoSuchNode' not found. The custom node may not be installed.",
+        "type": "missing_node_type"
+      },
+      "node_errors": {}
+    },
+    "status": 400
+  },
+  "value_below_min": {
+    "body": {
+      "error": {
+        "details": "",
+        "extra_info": {},
+        "message": "Prompt outputs failed validation",
+        "type": "prompt_outputs_failed_validation"
+      },
+      "node_errors": {
+        "1": {
+          "class_type": "EmptyImage",
+          "dependent_outputs": [
+            "2"
+          ],
+          "errors": [
+            {
+              "details": "width",
+              "extra_info": {
+                "input_config": [
+                  "INT",
+                  {
+                    "default": 512,
+                    "max": 16384,
+                    "min": 1,
+                    "step": 1
+                  }
+                ],
+                "input_name": "width",
+                "received_value": 0
+              },
+              "message": "Value 0 smaller than min of 1",
+              "type": "value_smaller_than_min"
+            }
+          ]
+        }
+      }
+    },
+    "status": 400
+  }
+}

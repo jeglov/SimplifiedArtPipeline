@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/artpipe/artpipe/conventions/gen_manifest.schema.json",
+  "title": "artpipe generation manifest",
+  "description": "Written by `artpipe gen run` next to the files it produced (out/gen/runs/<run_id>/manifest.json). The record of one generation: what was asked (workflow, params, pinned models; run_id hashes them), what ran it (environment) and what came out (outputs by sha256). Unlike the Maya and Unity reports it is not byte-identical across runs: execution timings, and output hashes on another GPU or driver, are expected to differ.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tool", "run_id", "status", "exit_code", "error", "workflow", "params", "models", "outputs", "environment", "execution"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "tool": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*-[0-9a-f]{12}$" },
+    "status": { "enum": ["ok", "error"] },
+    "exit_code": { "enum": [0, 2] },
+    "error": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "message", "node", "node_type", "exception_type"],
+          "properties": {
+            "type": { "type": "string", "minLength": 1 },
+            "message": { "type": "string" },
+            "node": { "type": ["string", "null"] },
+            "node_type": { "type": ["string", "null"] },
+            "exception_type": { "type": ["string", "null"] }
+          }
+        }
+      ]
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "sha256"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": { "type": ["integer", "number", "string"] }
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "folder", "file", "sha256", "licence", "source"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "folder": { "type": "string", "minLength": 1 },
+          "file": { "type": "string", "minLength": 1 },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "licence": { "type": "string", "minLength": 1 },
+          "source": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path", "sha256", "bytes"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "path": { "type": "string", "minLength": 1 },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "bytes": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["comfyui_version", "comfyui_commit", "comfyui_local_changes", "python", "torch", "gpu", "vram_mb", "driver", "argv"],
+      "properties": {
+        "comfyui_version": { "type": ["string", "null"] },
+        "comfyui_commit": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
+        "comfyui_local_changes": { "type": ["boolean", "null"] },
+        "python": { "type": ["string", "null"] },
+        "torch": { "type": ["string", "null"] },
+        "gpu": { "type": ["string", "null"] },
+        "vram_mb": { "type": ["integer", "null"], "minimum": 0 },
+        "driver": { "type": ["string", "null"] },
+        "argv": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt_id", "started_at", "seconds", "executed_nodes", "cached_nodes"],
+      "properties": {
+        "prompt_id": { "type": ["string", "null"] },
+        "started_at": { "type": ["string", "null"] },
+        "seconds": { "type": ["number", "null"], "minimum": 0 },
+        "executed_nodes": { "type": "array", "items": { "type": "string" } },
+        "cached_nodes": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}
