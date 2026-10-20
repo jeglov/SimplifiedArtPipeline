@@ -218,3 +218,129 @@ an alpha channel or a PNG `tRNS` chunk, which is what an engine sees.
 **Parity is tested on the real Editor**: eight textures (good, NPOT, too
 small, oversized, alpha forbidden or required, TGA) imported into Unity give
 the same verdict per check id as Python.
+
+## Image to 3D: `artpipe gen model`
+
+```
+artpipe gen model out/gen/runs/concept_zimage-6b48ea88f550 --class pickup
+# artpipe gen: PASS out/gen/runs/model_trellis2-cd133b436c13/model.report.json
+```
+
+Takes a concept run (refused unless its concept report passed) or any image,
+and runs `model_trellis2`: the TRELLIS.2 path of ComfyUI's official template
+(Pixal3D and MoGe left out), with the mesh stage rebuilt for mobile budgets.
+Decimation target = `tris_max x model.face_budget_share` (0.9), textures
+baked at the class's `texture_max_size`. Outputs `model.glb`,
+`base_color.png`, `normal.png` and `model.report.json` (tool
+`artpipe.gen.model`).
+
+Measured on the RTX 3070 Laptop: peak VRAM **7.96 GB of 8** (dynamic VRAM
+offloading does the rest), **~4 min** per model (88 s to 14 min depending on
+what else uses the machine).
+
+**Probed: the template's mesh stage can't reach a mobile budget.**
+
+| Stage | Triangles | Open edges | Non-manifold edges |
+|---|---|---|---|
+| TRELLIS.2 raw | 19.6 M | 104,251 | 247,235 |
+| Template remesh (UDF, 768) | 18.6 M | 6 | 53,124 |
+| One decimation to 270 (midpoint) | 175 | 21 | 1 |
+
+The coin came out a ring: both flat faces gone. Four variants on the cached
+raw mesh: **UDF remesh at 128 with the inner shell dropped, then QEM
+decimation** gave 113k closed, manifold triangles and a 270-triangle coin
+that keeps its star relief; SDF remeshing broke (1,765 open edges); midpoint
+placement was blobby. The 113k mesh is also the high-poly the normal map is
+baked from.
+
+**Checks on the GLB** (`gen/core/model.py`, pure Python, `validate/core/glb.py`
+reads GLB without dependencies): `model.triangles`, `model.vertices`
+(warning), `model.closed`, `model.manifold`, `model.uv`, `model.uv_overlap`,
+`model.interior_shells` (warning), `model.textures`.
+
+First batch, six concepts, seed 56: **2 of 6 pass** (gem, cone).
+
+| Asset | Result |
+|---|---|
+| coin | UV overlap 2.50 % |
+| gem | pass (interior shell: 118 of 270 triangles hidden inside, warning) |
+| heart | 1 non-manifold edge, UV overlap 0.65 % |
+| crate | 9 open edges, 1 non-manifold, UV overlap 2.98 % (thin slats) |
+| cone | pass |
+| cactus | UV overlap 0.03 % (2-triangle fold, tolerated) |
+
+* **UV overlap is a fold inside a chart, not a packing problem**: 2
+  triangles on the cactus at every packing resolution from 256 to 2048 and
+  with the `adaptive` segmenter. So the rule is on area: the shared area
+  (exact triangle clipping) may be at most `model.uv_overlap_max_share`
+  (0.5 %, ~160 texels at 256 px) of the used UV area. The pure-Python test
+  finds the same 42 triangles on the coin as Maya's polyUVOverlap.
+* **Hollow meshes.** UDF remeshing leaves an inner wall on some shapes even
+  with `drop_inverted_components`. A closed shell that faces inward and is
+  enclosed by an outward shell is an *interior* shell: invisible, pure
+  triangle cost. It is a warning here because the Maya fix deletes it.
+* **UV usage is ~50 %**: half of each texture is empty space between charts
+  (backlog #50).
+* Image-to-3D has no scale: every GLB is ~1 unit. Size comes from the class
+  at ingest.
+
+## Into Maya: `artpipe gen ingest`
+
+```
+artpipe gen ingest out/gen/runs/model_trellis2-cd133b436c13 --class pickup --name Gem
+artpipe build out/gen/assets/Gem/SM_Gem.ma --class pickup --texture out/gen/assets/Gem/T_Gem_D.png --texture out/gen/assets/Gem/T_Gem_N.png
+# artpipe build: PASS out/build/SM_Gem/build.report.json -> Assets/Art/pickup/SM_Gem.prefab
+```
+
+Refuses a model run whose report didn't pass. Writes
+`out/gen/assets/<Name>/SM_<Name>.ma`, `T_<Name>_D.png`, `T_<Name>_N.png` and
+`ingest.json` (scale, pivot mode, link to the model manifest by sha256). Then
+the ordinary path takes over: generated assets get no shortcut.
+
+* **Weld**: glTF duplicates vertices at every UV seam; Maya gets one vertex
+  per position with per-corner UVs, or every seam would be an open border.
+* **V flip**: glTF's UV origin is the image's top-left, Maya's and Unity's
+  bottom-left.
+* **Axes and size**: glTF is metres and +Y up like Maya's default, so no axis
+  change (backlog #4 doesn't apply to GLB). The largest dimension is set to
+  `ingest.size_cm` per class (pickup 40, prop_small 60) and the mesh placed
+  for the class pivot rule.
+* **Normals**: the baked normals are set per corner and locked: the normal
+  map was baked against exactly those normals.
+* **Material**: a plain lambert `M_<Name>`, no file textures. Unity remaps
+  the FBX material by name to a shared `Assets/Art/Materials/M_<Name>.mat`
+  and never reads textures from the FBX. Probed: file texture nodes make the
+  FBX exporter write absolute paths, and the canonical export refuses them
+  (fails closed, as designed in Phase 2). Creating that `.mat` is backlog #49.
+
+End to end, the gem (pickup) and the cone (prop_small) pass Maya and Unity:
+the gem's interior shell is deleted by the winding fix (270 -> 152
+triangles), texel density 95 px/m at 128 px; the cone needs no fix (450
+triangles, 173 px/m at 256 px). The only Unity finding is the
+`unity.materials` warning (#49).
+
+## New Maya checks (for every asset, not only generated ones)
+
+* **`topology.winding`** (backlog #43): every shell agrees with itself (on a
+  manifold edge the two faces run in opposite directions), and no closed
+  shell faces inward. Probed: Maya's Conform fixes minority faces but leaves
+  a whole inside-out shell of a combined mesh as it is; Maya also reports
+  edges between oppositely wound faces as non-manifold and border edges. The
+  fix conforms, **deletes interior shells** (inward and enclosed) and
+  reverses inside-out ones. A first version reversed interior shells too,
+  which would have shipped the gem's 118 hidden triangles.
+* **`uv.texel_density`** (backlog #13, warning): texture pixels per metre at
+  the class's texture size, faces more than 2x (one mip) off the mesh's
+  density, faces whose UVs have no area. Floors pinned from measurements on
+  generated assets, one mip below what was measured: pickup 64 px/m (coin
+  136, gem 95 at 128 px), prop_small 96 px/m (cone 173 at 256 px). Other
+  classes 0 until measured. The default polySphere's lat-long UVs trip the
+  2x rule at the poles, which is true, so the sphere fixtures expect it.
+
+## The repair loop (engine only, step 3.6 in progress)
+
+`gen/core/repair.py` and `repair` in `generation.yaml`: the first blocking
+failure picks retry (next seed: base + n x 1000) or stop, bounded by
+`max_attempts` (3); a tool error always stops; every attempt is recorded.
+Tested with scripted stages. Not wired into a command yet: `artpipe generate`
+(step 3.7) runs concept -> model -> ingest -> build through it.

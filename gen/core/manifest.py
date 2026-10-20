@@ -21,7 +21,7 @@ from gen.core.history import Execution, OutputFile
 from gen.core.rules import ModelPin
 from gen.core.workflow import Workflow
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"  # 1.1: "inputs" (file params by sha256)
 TOOL = "artpipe.gen 1.0"
 _SAFE_EXT = re.compile(r"^\.[a-z0-9]{1,8}$")
 
@@ -125,7 +125,8 @@ def environment(system_stats: Mapping[str, Any], commit: Optional[str], dirty: O
 def build(*, wf: Workflow, workflow_path: str, params: Mapping[str, Any], rid: str,
           prompt_id: Optional[str], models: Sequence[Tuple[ModelPin, str]],
           env: Mapping[str, Any], execution: Optional[Execution],
-          outputs: Sequence[Mapping[str, Any]], error: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+          outputs: Sequence[Mapping[str, Any]], error: Optional[Mapping[str, Any]],
+          inputs: Sequence[Mapping[str, Any]] = ()) -> Dict[str, Any]:
     ok = error is None
     ex = execution
     return {
@@ -137,6 +138,7 @@ def build(*, wf: Workflow, workflow_path: str, params: Mapping[str, Any], rid: s
         "error": dict(error) if error else None,
         "workflow": {"id": wf.id, "path": workflow_path, "sha256": wf.sha256},
         "params": dict(sorted(params.items())),
+        "inputs": list(inputs),
         "models": [{"id": p.id, "folder": p.folder, "file": p.file, "sha256": sha,
                     "licence": p.licence, "source": p.source} for p, sha in models],
         "outputs": list(outputs),

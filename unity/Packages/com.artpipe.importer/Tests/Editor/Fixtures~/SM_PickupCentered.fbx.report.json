@@ -9,7 +9,7 @@
   },
   "exported_from": {
     "path": "out/unity_fixtures/scenes/SM_PickupCentered.ma",
-    "sha256": "825b89276b718f3706620ab1430edb3ebddff81be98a8a6c224a35624944763c"
+    "sha256": "8af863a095a8d17b5a85ced4ccc015e0686c3913d31e8cdd9b7d6dc84f380bdd"
   },
   "fixed_from": null,
   "fixes": [],
@@ -76,6 +76,23 @@
         "meshes_checked": 1,
         "not_verifiable": 0,
         "opposite_flag": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
+      "fixable": true,
+      "id": "topology.winding",
+      "message": "every shell is consistently wound",
+      "metrics": {
+        "flipped_faces": 0,
+        "interior_faces": 0,
+        "interior_shells": 0,
+        "inward_shells": 0,
+        "meshes": {},
+        "non_orientable_shells": 0
       },
       "offender_count": 0,
       "offenders": [],
@@ -204,6 +221,30 @@
       "severity": "info"
     },
     {
+      "fixable": false,
+      "id": "uv.texel_density",
+      "message": "texel density SM_PickupCentered 92 px/m at 128 px",
+      "metrics": {
+        "meshes": {
+          "|SM_PickupCentered": {
+            "off_faces": 0,
+            "px_per_m": 92.4,
+            "texture_px_needed": 128,
+            "zero_uv_faces": 0
+          }
+        },
+        "meshes_skipped": 0,
+        "min_px_per_m": 64.0,
+        "off_faces": 0,
+        "texture_size": 128,
+        "zero_uv_faces": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "warning"
+    },
+    {
       "fixable": true,
       "id": "scene.units",
       "message": "not verifiable for FBX yet (backlog #4); transform.size still catches unit mistakes",
@@ -243,14 +284,14 @@
         ],
         "anchor_offset_cm": 0.0,
         "bbox_max_cm": [
-          30.0,
-          30.0,
-          30.0
+          20.0,
+          20.0,
+          20.0
         ],
         "bbox_min_cm": [
-          -30.0,
-          -30.0,
-          -30.0
+          -20.0,
+          -20.0,
+          -20.0
         ],
         "mode": "center",
         "pivots_off_origin": {},
@@ -264,14 +305,14 @@
     {
       "fixable": false,
       "id": "transform.size",
-      "message": "largest dimension 60.0 cm, within 5-100 cm for pickup",
+      "message": "largest dimension 40.0 cm, within 5-100 cm for pickup",
       "metrics": {
         "dimensions_cm": [
-          60.0,
-          60.0,
-          60.0
+          40.0,
+          40.0,
+          40.0
         ],
-        "largest_cm": 60.0,
+        "largest_cm": 40.0,
         "size_cm_max": 100.0,
         "size_cm_min": 5.0,
         "unit_guess": null
@@ -314,15 +355,15 @@
   "schema_version": "1.2",
   "source": {
     "path": "unity/Packages/com.artpipe.importer/Tests/Editor/Fixtures~/SM_PickupCentered.fbx",
-    "sha256": "361e3ab5a5c76b8dd803f4e9cd7993475ad4a29c0e5e983d25c94ca292cc251e"
+    "sha256": "16cee7fa8be4549ae614df1ea0cc59992b45e15acfc6b749b9fee8e36c432fd3"
   },
   "status": "pass",
   "summary": {
     "errors": 0,
     "fixable": 0,
     "fixes_applied": 0,
-    "passed": 18,
-    "total": 18,
+    "passed": 20,
+    "total": 20,
     "warnings": 0
   },
   "tool": "artpipe.validate.maya",

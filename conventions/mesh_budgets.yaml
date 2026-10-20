@@ -57,6 +57,11 @@ defaults:
     # (more texel density for free). Overlap only matters on a lightmap UV,
     # which Unity generates on import (Phase 2), so it is allowed here.
     overlap_allowed: true
+    # uv.texel_density (warning): texture pixels per metre of surface at the
+    # class's max texture size. 0 = no minimum (the check still flags faces
+    # more than 2x off the mesh's own density, and faces with no UV area).
+    # Pinned per class only where measured (pickup, prop_small; backlog #13).
+    texel_density_min_px_per_m: 0
 
   severity_overrides: {}    # {check_id: error|warning|info}
 
@@ -67,12 +72,18 @@ classes:
     verts_max: 450
     size_cm: {min: 5, max: 100}
     pivot: {mode: center}
+    # Measured on generated assets at 128 px (P3 step 3.5): coin 136, gem 95
+    # px/m. The floor sits one mip below: it catches a broken unwrap (most of
+    # the texture wasted), not a style choice.
+    uv: {texel_density_min_px_per_m: 64}
 
   prop_small:
     description: Small set dressing (bottle, cone, crate). Many instances.
     tris_max: 500
     verts_max: 750
     size_cm: {min: 5, max: 150}
+    # Measured on a generated traffic cone at 256 px: 173 px/m. One mip below.
+    uv: {texel_density_min_px_per_m: 96}
 
   prop_medium:
     description: Furniture-scale props, obstacles.

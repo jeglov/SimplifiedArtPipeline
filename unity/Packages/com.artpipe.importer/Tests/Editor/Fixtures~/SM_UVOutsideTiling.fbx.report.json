@@ -83,6 +83,23 @@
       "severity": "error"
     },
     {
+      "fixable": true,
+      "id": "topology.winding",
+      "message": "every shell is consistently wound",
+      "metrics": {
+        "flipped_faces": 0,
+        "interior_faces": 0,
+        "interior_shells": 0,
+        "inward_shells": 0,
+        "meshes": {},
+        "non_orientable_shells": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
       "fixable": false,
       "id": "topology.ngons",
       "message": "no ngons",
@@ -198,6 +215,30 @@
       "severity": "info"
     },
     {
+      "fixable": false,
+      "id": "uv.texel_density",
+      "message": "texel density SM_UVOutsideTiling 493 px/m at 1024 px",
+      "metrics": {
+        "meshes": {
+          "|SM_UVOutsideTiling": {
+            "off_faces": 0,
+            "px_per_m": 492.7,
+            "texture_px_needed": 0,
+            "zero_uv_faces": 0
+          }
+        },
+        "meshes_skipped": 0,
+        "min_px_per_m": 0.0,
+        "off_faces": 0,
+        "texture_size": 1024,
+        "zero_uv_faces": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "warning"
+    },
+    {
       "fixable": true,
       "id": "scene.units",
       "message": "not verifiable for FBX yet (backlog #4); transform.size still catches unit mistakes",
@@ -311,8 +352,8 @@
     "errors": 0,
     "fixable": 0,
     "fixes_applied": 0,
-    "passed": 18,
-    "total": 18,
+    "passed": 20,
+    "total": 20,
     "warnings": 0
   },
   "tool": "artpipe.validate.maya",

@@ -194,7 +194,10 @@ def test_bad_style_files_fail_at_load(over, match):
 
 def test_concept_rules_are_validated():
     data = {"version": 1, "comfyui": {"version": "0.42.1", "commit": "a" * 40, "port": 8188,
-                                      "startup_timeout_s": 1, "run_timeout_s": 1}, "models": {}}
+                                      "startup_timeout_s": 1, "run_timeout_s": 1}, "models": {},
+            "model": {"face_budget_share": 0.9, "remesh_resolution": 128, "uv_overlap_max_share": 0.005},
+            "ingest": {"size_cm": {"pickup": 40}},
+            "repair": {"max_attempts": 3, "seed_step": 1000, "default": "stop", "actions": {}}}
     good = dict(grid=64, mask_threshold=128, background_tolerance=28, background_uniformity_min=0.97,
                 coverage_min=0.06, coverage_max=0.7, margin_min=0.02, single_object_min=0.95, speck_cells=4)
     assert gr.parse(dict(data, concept=good)).concept.grid == 64

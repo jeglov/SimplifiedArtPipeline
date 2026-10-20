@@ -33,7 +33,10 @@ def rules_data(**models):
             "comfyui": {"version": "0.42.1", "commit": COMMIT, "port": 8188,
                         "startup_timeout_s": 180, "run_timeout_s": 1800},
             "models": models,
-            "concept": dict(CONCEPT)}
+            "concept": dict(CONCEPT),
+            "model": {"face_budget_share": 0.9, "remesh_resolution": 128, "uv_overlap_max_share": 0.005},
+            "ingest": {"size_cm": {"pickup": 40}},
+            "repair": {"max_attempts": 3, "seed_step": 1000, "default": "stop", "actions": {}}}
 
 
 CONCEPT = {"grid": 64, "mask_threshold": 128, "background_tolerance": 28, "background_uniformity_min": 0.97,

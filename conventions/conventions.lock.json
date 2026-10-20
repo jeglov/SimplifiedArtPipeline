@@ -410,7 +410,7 @@
   },
   "sources": {
     "fbx_export.yaml": "cafff9a8508ff0ab0c4a3c0911028ee3f99f61836c0fbab725b70010456c8f4d",
-    "mesh_budgets.yaml": "3e303d868d29ecad71d41def0e460012f8ee8150b2348105d065252e42ee9b27",
+    "mesh_budgets.yaml": "bac8efa2e9048c2477bce52ef53737d8955762ec68373c65728817dec256d527",
     "naming.schema.json": "796b030630d0a9b832b9815139301e0c825e862c52e8493e1b53707c4aed6e34",
     "texture_rules.yaml": "2df406a492aa18137c59c2036da90f0b8747399623561468f66a02399f854132",
     "unity_import.yaml": "bc9a3f96949e568799518b534582a9c9c31aaf655c276eed3998129caf17f0e3"

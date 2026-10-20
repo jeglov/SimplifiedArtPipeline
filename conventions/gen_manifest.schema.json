@@ -6,9 +6,9 @@
 
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "tool", "run_id", "status", "exit_code", "error", "workflow", "params", "models", "outputs", "environment", "execution"],
+  "required": ["schema_version", "tool", "run_id", "status", "exit_code", "error", "workflow", "params", "inputs", "models", "outputs", "environment", "execution"],
   "properties": {
-    "schema_version": { "const": "1.0" },
+    "schema_version": { "const": "1.1" },
     "tool": { "type": "string", "minLength": 1 },
     "run_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*-[0-9a-f]{12}$" },
     "status": { "enum": ["ok", "error"] },
@@ -43,6 +43,20 @@
     "params": {
       "type": "object",
       "additionalProperties": { "type": ["integer", "number", "string"] }
+    },
+    "inputs": {
+      "description": "Files given to `file` params: the local path and its sha256 (the name ComfyUI saw).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["param", "path", "sha256"],
+        "properties": {
+          "param": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "path": { "type": "string", "minLength": 1 },
+          "sha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
     },
     "models": {
       "type": "array",

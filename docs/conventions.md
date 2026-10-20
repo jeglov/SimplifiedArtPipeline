@@ -201,19 +201,21 @@ above. Textures are validated and imported by the Unity package (see
 | 3 | `topology.lamina_faces` | No duplicate faces that share all of their edges with another face. | error | yes |
 | 4 | `topology.open_borders` | The mesh is watertight: no border edges (holes). | error | — |
 | 5 | `topology.inverted` | Faces point outward in the exported file (closed meshes) and no shape has the `opposite` flag. | error | yes |
-| 6 | `topology.ngons` | No polygons with more than 4 sides. | error | — |
-| 7 | `budget.tris` | LOD0 triangle count is within the asset class budget. | error | — |
-| 8 | `budget.lods` | LOD count is allowed for the class, levels are contiguous and each LOD is light enough. | error | — |
-| 9 | `budget.materials` | Every mesh has at least one and at most max_materials materials. | error | — |
-| 10 | `uv.present` | Required UV sets exist, come first in the set order, and map every face. | error | yes |
-| 11 | `uv.unit_square` | All UV0 coordinates are inside the 0-1 square (unless the class allows tiling). | error | — |
-| 12 | `uv.overlap` | UV0 faces don't overlap (reported as info where the class allows overlap). | info (error where the class sets overlap_allowed: false) | — |
-| 13 | `scene.units` | The scene's linear unit matches the conventions (cm). Not verifiable for FBX yet. | warning | yes |
-| 14 | `transform.frozen` | Meshes and their parent groups have frozen transforms (t=0, r=0, s=1, no shear). | error | yes |
-| 15 | `transform.pivot` | Pivots are at the world origin and the geometry is placed per the class pivot mode. | error | yes |
-| 16 | `transform.size` | The largest dimension (cm) is within the asset class size range. | error | — |
-| 17 | `naming.convention` | Names follow naming.schema.json; one root named like the file; consistent LOD suffixes. | error | yes |
-| 18 | `scene.history` | Meshes have no construction (modelling) history; deformers are allowed. | error | yes |
+| 6 | `topology.winding` | Faces agree with their shell's winding; no closed shell faces inward or hides inside another. | error | yes |
+| 7 | `topology.ngons` | No polygons with more than 4 sides. | error | — |
+| 8 | `budget.tris` | LOD0 triangle count is within the asset class budget. | error | — |
+| 9 | `budget.lods` | LOD count is allowed for the class, levels are contiguous and each LOD is light enough. | error | — |
+| 10 | `budget.materials` | Every mesh has at least one and at most max_materials materials. | error | — |
+| 11 | `uv.present` | Required UV sets exist, come first in the set order, and map every face. | error | yes |
+| 12 | `uv.unit_square` | All UV0 coordinates are inside the 0-1 square (unless the class allows tiling). | error | — |
+| 13 | `uv.overlap` | UV0 faces don't overlap (reported as info where the class allows overlap). | info (error where the class sets overlap_allowed: false) | — |
+| 14 | `uv.texel_density` | Texel density at the class's texture size: above the class minimum, no face 2x off, no zero-UV faces. | warning | — |
+| 15 | `scene.units` | The scene's linear unit matches the conventions (cm). Not verifiable for FBX yet. | warning | yes |
+| 16 | `transform.frozen` | Meshes and their parent groups have frozen transforms (t=0, r=0, s=1, no shear). | error | yes |
+| 17 | `transform.pivot` | Pivots are at the world origin and the geometry is placed per the class pivot mode. | error | yes |
+| 18 | `transform.size` | The largest dimension (cm) is within the asset class size range. | error | — |
+| 19 | `naming.convention` | Names follow naming.schema.json; one root named like the file; consistent LOD suffixes. | error | yes |
+| 20 | `scene.history` | Meshes have no construction (modelling) history; deformers are allowed. | error | yes |
 <!-- /generated:checks -->
 
 **Severity:**
@@ -241,12 +243,13 @@ skipped, with its reason.
 |---|---|---|
 | 1 | `topology.lamina_faces` | Delete the duplicate (stacked) faces reported by the check. |
 | 2 | `scene.history` | Bake construction history into the mesh (deformers are kept). |
-| 3 | `topology.inverted` | Reverse inward-facing meshes and clear the `opposite` flag, keeping what Maya shows on open meshes. |
-| 4 | `uv.present` | Rename a lone UV set to the required name, or move the required set first. |
-| 5 | `scene.units` | Set the scene's linear unit to the conventions unit (geometry is unchanged). |
-| 6 | `transform.frozen` | Freeze transforms on the asset hierarchy and reset pivots to the origin. |
-| 7 | `transform.pivot` | Reset pivots to the origin and move the geometry so its class anchor sits there. |
-| 8 | `naming.convention` | Rename default/invalid mesh, root group and material names after the file. |
+| 3 | `topology.winding` | Conform each shell to its majority, delete interior shells, reverse inside-out shells. |
+| 4 | `topology.inverted` | Reverse inward-facing meshes and clear the `opposite` flag, keeping what Maya shows on open meshes. |
+| 5 | `uv.present` | Rename a lone UV set to the required name, or move the required set first. |
+| 6 | `scene.units` | Set the scene's linear unit to the conventions unit (geometry is unchanged). |
+| 7 | `transform.frozen` | Freeze transforms on the asset hierarchy and reset pivots to the origin. |
+| 8 | `transform.pivot` | Reset pivots to the origin and move the geometry so its class anchor sits there. |
+| 9 | `naming.convention` | Rename default/invalid mesh, root group and material names after the file. |
 <!-- /generated:fixes -->
 
 **A fix refuses to run, and says why, when it can't be sure:**

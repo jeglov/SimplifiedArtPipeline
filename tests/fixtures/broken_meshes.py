@@ -43,12 +43,26 @@ EXPECT = {
     "SM_OpenOpposite": ("env_module", ["topology.inverted", "topology.open_borders"]),
     "SM_OpenReversed": ("prop_small", ["topology.open_borders"]),  # boundary: open + reversed is invisible
     "SK_SkinnedOpposite": ("character", ["topology.inverted"]),  # fix blocked: the mesh is skinned
+    # Backlog #43: winding per shell. Two faces of a cube reversed (the total
+    # volume stays positive, so topology.inverted passes), and a combined
+    # mesh with one whole cube inside out (total volume 0: "flat", unverifiable).
+    # Probed: Maya counts an edge between two oppositely wound faces as
+    # non-manifold AND as a border, so those two checks fail too. Only winding says
+    # which faces and fixes them (Conform); after the fix both pass.
+    "SM_FlippedFaces": ("prop_small", ["topology.non_manifold", "topology.open_borders", "topology.winding"]),
+    "SM_FlippedShell": ("prop_small", ["topology.winding"]),
+    # A hollow box: an inward cube inside an outward one, as UDF remeshing
+    # leaves it. The fix must DELETE the inner shell, never reverse it.
+    "SM_InteriorShell": ("prop_small", ["topology.winding"]),
     "SM_Ngon": ("prop_small", ["topology.ngons"]),
     "SM_Pentagon": ("prop_small", ["topology.ngons"]),           # boundary: 5 sides is the smallest ngon
-    "SM_OverBudget": ("prop_small", ["budget.tris"]),            # 760 tris > 500
-    "SM_LodsGood": ("prop_medium", []),                          # LOD0 760, LOD1 180 (max 418)
-    "SM_LodTooHeavy": ("prop_medium", ["budget.lods"]),          # LOD0 760, LOD1 480 (max 418)
-    "SM_LodGap": ("prop_hero", ["budget.lods"]),                 # LOD0 + LOD2, no LOD1
+    # Spheres: lat-long UVs keep their area toward the poles while the faces
+    # shrink, so the pole rings are >2x denser than the mesh (uv.texel_density, a
+    # warning). True of every default polySphere, so it stays in the expectations.
+    "SM_OverBudget": ("prop_small", ["budget.tris", "uv.texel_density"]),  # 760 tris > 500
+    "SM_LodsGood": ("prop_medium", ["uv.texel_density"]),        # LOD0 760, LOD1 180 (max 418)
+    "SM_LodTooHeavy": ("prop_medium", ["budget.lods", "uv.texel_density"]),  # LOD0 760, LOD1 480 (max 418)
+    "SM_LodGap": ("prop_hero", ["budget.lods", "uv.texel_density"]),  # LOD0 + LOD2, no LOD1
     "SM_TooManyLods": ("prop_small", ["budget.lods"]),           # 2 levels, prop_small allows 1
     "SM_TwoMaterials": ("prop_small", ["budget.materials"]),     # 2 materials, prop_small allows 1
     "SM_NoMaterial": ("prop_small", ["budget.materials"]),
@@ -59,20 +73,26 @@ EXPECT = {
     "SM_UVSetOrder": ("prop_small", ["uv.present"]),             # lightmap set first -> Unity UV0
     "SM_UVOutside": ("prop_small", ["uv.unit_square"]),          # shifted to u 1..2
     "SM_UVOutsideTiling": ("env_module", []),                    # same, but tiling is allowed
-    "SM_UVOverlap": ("prop_small", ["uv.overlap"]),              # severity info: report still passes
+    # Planar Z projection: front and back stack (info), the four sides become lines (zero UV area).
+    "SM_UVOverlap": ("prop_small", ["uv.overlap", "uv.texel_density"]),
+    # Backlog #13 (warnings): one face's UVs shrunk to 10% (100x fewer texels
+    # than its neighbours), and one face's UVs collapsed to a point.
+    "SM_TexelStretch": ("prop_small", ["uv.texel_density"]),
+    "SM_ZeroUVFace": ("prop_small", ["uv.overlap", "uv.texel_density"]),  # the point lands on a neighbour
     "SM_NotFrozen": ("prop_small", ["transform.frozen"]),        # mesh rotated 90 on Y, not frozen
-    "SM_GroupNotFrozen": ("prop_medium", ["transform.frozen"]),  # LOD group scaled 1.2, not frozen
+    "SM_GroupNotFrozen": ("prop_medium", ["transform.frozen", "uv.texel_density"]),  # LOD group scaled 1.2
     "SM_GeoOffset": ("prop_small", ["transform.pivot"]),         # centred on origin, not standing on it
     "SM_PivotMoved": ("prop_small", ["transform.pivot"]),        # Maya pivot moved to a corner
     "SM_PickupCentered": ("pickup", []),                         # pickup = center mode: centred is right
     "SM_PickupOnGround": ("pickup", ["transform.pivot"]),        # standing on origin is wrong for pickups
     "SM_TooSmall": ("prop_small", ["transform.size"]),           # 0.6 cm: authored in metres
-    "SM_TooBig": ("prop_small", ["transform.size"]),             # 600 cm: authored in millimetres
+    # 600 cm: authored in millimetres. 10x the size spreads the texture 10x thinner too.
+    "SM_TooBig": ("prop_small", ["transform.size", "uv.texel_density"]),
     "SM_Meters": ("prop_small", ["scene.units"]),                # scene unit m (warning: still passes)
     "SM_BadMeshName": ("prop_small", ["naming.convention"]),     # mesh "pCube1"
     "SM_BadGroupName": ("prop_small", ["naming.convention"]),    # root group "group1"
     "SM_BadMaterialName": ("prop_small", ["naming.convention"]), # material "lambert2"
-    "SM_MixedLods": ("prop_medium", ["naming.convention"]),      # _LOD0 + a mesh without suffix
+    "SM_MixedLods": ("prop_medium", ["naming.convention", "uv.texel_density"]),  # _LOD0 + a mesh without suffix
     "SK_WrongPrefix": ("prop_small", ["naming.convention"]),     # SK_ (skinned) prefix on a static prop
     "SM_ExtraRoot": ("prop_small", ["naming.convention"]),       # stray locator at the root
     "SM_FileMismatch": ("prop_small", ["naming.convention"]),    # file SM_FileMismatch, mesh SM_Crate
@@ -98,9 +118,12 @@ FIX_EXPECT = {
     "SM_Opposite": [],
     "SM_FrozenMirror": [],
     "SM_Reversed": [],
+    "SM_FlippedFaces": [],
+    "SM_FlippedShell": [],
+    "SM_InteriorShell": [],
     "SM_OpenOpposite": ["topology.open_borders"],
     "SM_NotFrozen": [],
-    "SM_GroupNotFrozen": [],
+    "SM_GroupNotFrozen": ["uv.texel_density"],
     "SM_GeoOffset": [],
     "SM_PivotMoved": [],
     "SM_PickupOnGround": [],
@@ -117,7 +140,8 @@ FIX_EXPECT = {
 SELF_PLACED = {"SM_NotFrozen", "SM_GroupNotFrozen", "SM_GeoOffset", "SM_PivotMoved",
                "SM_PickupCentered", "SM_PickupOnGround", "SM_TooSmall", "SM_TooBig", "SM_Meters",
                "SM_WithHistory", "SK_Skinned", "SK_SkinnedHistory", "SK_SkinnedLamina",
-               "SM_NegativeScale", "SM_Messy", "SM_Empty", "SM_FrozenMirror", "SK_SkinnedOpposite"}
+               "SM_NegativeScale", "SM_Messy", "SM_Empty", "SM_FrozenMirror", "SK_SkinnedOpposite",
+               "SM_InteriorShell"}
 
 
 def _merge(name, parts):
@@ -244,6 +268,52 @@ def build_skinned_opposite():
     _conform()
     _set_opposite(mesh)
     _skin(mesh)
+
+
+def build_flipped_faces():
+    from maya import cmds
+    mesh = _merge("SM_FlippedFaces", [_cube()])
+    cmds.polyNormal(mesh + ".f[0]", mesh + ".f[3]", normalMode=0, userNormalMode=1, ch=False)
+
+
+def build_flipped_shell():
+    from maya import cmds
+    a, b = _cube(-0.75, uv_tile=(0, 0)), _cube(0.75, uv_tile=(1, 0))
+    _reverse(b)
+    combined = cmds.polyUnite(a, b, ch=False, name="SM_FlippedShell")[0]
+    cmds.delete(combined, constructionHistory=True)
+
+
+def build_interior_shell():
+    from maya import cmds
+    outer = _cube(uv_tile=(0, 0))
+    inner = _cube(uv_tile=(1, 0))
+    cmds.scale(0.8, 0.8, 0.8, inner)
+    cmds.makeIdentity(inner, apply=True, scale=True)
+    _reverse(inner)
+    combined = cmds.polyUnite(outer, inner, ch=False, name="SM_InteriorShell")[0]
+    cmds.delete(combined, constructionHistory=True)
+    # 30 cm: quarter-size UV tiles on a 60 cm box would also miss prop_small's
+    # texel density floor; this fixture is about winding only.
+    _conform(size=30.0)
+
+
+def build_texel_stretch():
+    from maya import cmds
+    mesh = _merge("SM_TexelStretch", [_cube()])
+    cmds.polyEditUV(cmds.polyListComponentConversion(mesh + ".f[1]", toUV=True),
+                    pivotU=0.5, pivotV=0.5, scaleU=0.1, scaleV=0.1)
+    cmds.delete(mesh, constructionHistory=True)
+
+
+def build_zero_uv_face():
+    from maya import cmds
+    mesh = _merge("SM_ZeroUVFace", [_cube()])
+    # Unshare the face's UVs first, so collapsing them doesn't drag its neighbours along.
+    cmds.polyMapCut(cmds.polyListComponentConversion(mesh + ".f[1]", toEdge=True), ch=False)
+    cmds.polyEditUV(cmds.polyListComponentConversion(mesh + ".f[1]", toUV=True),
+                    pivotU=0.5, pivotV=0.5, scaleU=0.0, scaleV=0.0)
+    cmds.delete(mesh, constructionHistory=True)
 
 
 def build_ngon():
@@ -401,16 +471,18 @@ def build_pivot_moved():
 
 def build_pickup_centered():
     from maya import cmds
+    # 40 cm, like a generated pickup: a 60 cm cube at pickup's 128 px is below
+    # its texel density floor (62 < 64 px/m), and this fixture is about pivots.
     mesh = _merge("SM_PickupCentered", [_cube()])
-    _conform()
-    cmds.move(0, -30, 0, mesh, relative=True)
+    _conform(size=40.0)
+    cmds.move(0, -20, 0, mesh, relative=True)
     cmds.makeIdentity(mesh, apply=True, translate=True)
     cmds.xform(mesh, pivots=(0, 0, 0), worldSpace=True)
 
 
 def build_pickup_on_ground():
     _merge("SM_PickupOnGround", [_cube()])
-    _conform()
+    _conform(size=40.0)  # see build_pickup_centered
 
 
 def build_too_small():
@@ -565,6 +637,11 @@ BUILDERS = {
     "SM_OpenOpposite": build_open_opposite,
     "SM_OpenReversed": build_open_reversed,
     "SK_SkinnedOpposite": build_skinned_opposite,
+    "SM_FlippedFaces": build_flipped_faces,
+    "SM_FlippedShell": build_flipped_shell,
+    "SM_InteriorShell": build_interior_shell,
+    "SM_TexelStretch": build_texel_stretch,
+    "SM_ZeroUVFace": build_zero_uv_face,
     "SM_Ngon": build_ngon,
     "SM_Pentagon": build_pentagon,
     "SM_OverBudget": build_over_budget,

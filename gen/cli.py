@@ -2,6 +2,8 @@
 
     artpipe gen run WORKFLOW [--param NAME VALUE ...] [--out DIR] [--keep-server]
     artpipe gen concept "SUBJECT" --class C --style S [--seed N] [--out DIR] [--keep-server]
+    artpipe gen model CONCEPT_RUN_OR_IMAGE --class C [--seed N] [--out DIR] [--keep-server]
+    artpipe gen ingest MODEL_RUN --class C --name Name [--size-cm N] [--out DIR]
     artpipe gen server start|stop|status
 
 WORKFLOW: an id from gen/workflows/ (e.g. smoke_empty_image) or a path to a
@@ -27,6 +29,7 @@ import hashlib
 import json
 import os
 import shutil
+import struct
 import sys
 import uuid
 from pathlib import Path
@@ -39,17 +42,24 @@ from gen.core import manifest as mf
 from gen.core import rules as gen_rules
 from gen.core import workflow as wfl
 from gen.core import concept as concept_checks
+from gen.core import ingest as ingest_core
+from gen.core import model as model_checks
 from gen.core.rules import ModelPin
 from validate.core import conventions as conv
+from validate.core.glb import GlbError
+from validate.core.glb import read as read_glb
 from validate.core.image import ImageError, decode_png
 from validate.core.paths import report_path
 from validate.core.result import Report
 
 RUNS = comfy.OUT / "runs"
+ASSETS = comfy.OUT / "assets"
 HASH_CACHE = comfy.OUT / "model_hashes.json"
 EXIT_OK, EXIT_TOOL_ERROR = 0, 2
 CONCEPT_WORKFLOW = "concept_zimage"
 CONCEPT_TOOL = "artpipe.gen.concept"
+MODEL_WORKFLOW = "model_trellis2"
+MODEL_TOOL = "artpipe.gen.model"
 
 
 def sha256_file(path: Path) -> str:
@@ -114,6 +124,29 @@ def reusable(run_dir: Path) -> Optional[Dict[str, Any]]:
     return data
 
 
+def stage_inputs(wf: wfl.Workflow, values: Mapping[str, Any]
+                 ) -> Tuple[Dict[str, Any], Dict[str, Any], List[Dict[str, Any]], List[Tuple[Path, str]]]:
+    """File params -> (values for the manifest, values for the graph, inputs record, copies to make).
+
+    The graph gets "<sha256><ext>": a name ComfyUI finds in our input folder
+    and that changes exactly when the content does.
+    """
+    shown, graph_values, inputs, copies = dict(values), dict(values), [], []
+    for name, p in sorted(wf.params.items()):
+        if p.type != "file":
+            continue
+        src = Path(str(values[name]))
+        if not str(values[name]) or not src.is_file():
+            raise ToolError("--param %s: file not found: %r" % (name, str(values[name])))
+        digest = sha256_file(src)
+        staged = digest + src.suffix.lower()
+        shown[name] = report_path(src)
+        graph_values[name] = staged
+        inputs.append({"param": name, "path": report_path(src), "sha256": digest})
+        copies.append((src, staged))
+    return shown, graph_values, inputs, copies
+
+
 def run(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep_server: bool = False,
         env: Mapping[str, str] = os.environ) -> Tuple[int, str]:
     code, message, _ = generate(workflow_arg, pairs, out_dir, keep_server, env)
@@ -125,8 +158,9 @@ def generate(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep
     """Run one workflow. (exit code, message, run folder with manifest.json)."""
     rules = gen_rules.load()
     wf = wfl.load(Path(workflow_arg), rules)
-    values = wfl.resolve_params(wf, wfl.parse_overrides(list(pairs), wf))
-    graph = wfl.fill(wf, values)
+    values, graph_values, inputs, copies = stage_inputs(
+        wf, wfl.resolve_params(wf, wfl.parse_overrides(list(pairs), wf)))
+    graph = wfl.fill(wf, graph_values)
     pins = wfl.pins_for(wf, rules)
     models = verify_models(pins, comfy.models_dir(env) if pins else None)
     rid = wfl.run_id(wf, graph, {p.id: sha for p, sha in models}, rules.comfyui.commit)
@@ -140,6 +174,9 @@ def generate(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep
         stats = client.stats() or {}
         env_record = mf.environment(stats, mf.git_head(comfy.comfy_dir(env)),
                                     comfy.local_changes(comfy.comfy_dir(env)), comfy.gpu_driver())
+        for src, staged in copies:
+            (comfy.WORK / "input").mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(str(src), str(comfy.WORK / "input" / staged))
         if run_dir.exists():
             shutil.rmtree(str(run_dir))  # a failed or tampered earlier attempt
         run_dir.mkdir(parents=True)
@@ -161,7 +198,7 @@ def generate(workflow_arg: str, pairs: Sequence[str], out_dir: Path = RUNS, keep
                              "message": "the run succeeded but produced no declared output file"}
         manifest = mf.build(wf=wf, workflow_path=report_path(wf.path), params=values, rid=rid,
                             prompt_id=prompt_id, models=models, env=env_record,
-                            execution=execution, outputs=outputs, error=error)
+                            execution=execution, outputs=outputs, error=error, inputs=inputs)
         path = run_dir / "manifest.json"
         path.write_text(mf.to_json(manifest), encoding="utf-8")
     finally:
@@ -212,6 +249,98 @@ def concept(subject: str, asset_class: str, style: str, seed: int = 0, out_dir: 
     return report.exit_code, "%s %s" % (report.status.value.upper(), report_path(out)), run_dir
 
 
+def model(source: str, asset_class: str, seed: int = 56, out_dir: Path = RUNS,
+          keep_server: bool = False, env: Mapping[str, str] = os.environ) -> Tuple[int, str, Path]:
+    """Image to textured low-poly GLB at the class budgets, then the model.* checks.
+
+    `source`: a concept run folder (its image.png; refused unless its
+    concept.report.json passed) or any image file. Writes <run>/model.report.json.
+    Exit 0 usable / 1 not (the report says why) / 2 tool error.
+    """
+    c = conv.load()
+    cls = c.asset_class(asset_class)
+    src = Path(source)
+    if src.is_dir():
+        verdict = src / "concept.report.json"
+        try:
+            status = json.loads(verdict.read_text(encoding="utf-8"))["status"]
+        except (OSError, ValueError, KeyError):
+            raise ToolError("%s has no readable concept.report.json: run `artpipe gen concept` first" % src)
+        if status != "pass":
+            raise ToolError("the concept image in %s failed its checks (%s): image-to-3D would "
+                            "model the problem. Generate a new concept first" % (src, verdict))
+        src = src / "image.png"
+    rules = gen_rules.load().model
+    size = cls.texture_max_size
+    pairs = ["image=%s" % src, "seed=%d" % seed, "faces=%d" % rules.target_faces(cls.tris_max),
+             "texture_size=%d" % size, "normal_size=%d" % size, "atlas_size=%d" % size,
+             "remesh_resolution=%d" % rules.remesh_resolution]
+    code, message, run_dir = generate(MODEL_WORKFLOW, pairs, out_dir, keep_server, env)
+    if code != EXIT_OK:
+        return code, message, run_dir
+    glb_path = run_dir / "model.glb"
+    shown = report_path(glb_path)
+    try:
+        report = Report(shown, sha256_file(glb_path), asset_class,
+                        results=model_checks.check(read_glb(glb_path), cls, shown, rules.uv_overlap_max_share),
+                        tool=MODEL_TOOL)
+    except (GlbError, OSError, KeyError, IndexError, struct.error) as exc:
+        report = Report(shown, sha256_file(glb_path) if glb_path.is_file() else "", asset_class,
+                        tool_error="unreadable GLB: %s" % exc, tool=MODEL_TOOL)
+    out = run_dir / "model.report.json"
+    out.write_text(report.to_json(), encoding="utf-8")
+    return report.exit_code, "%s %s" % (report.status.value.upper(), report_path(out)), run_dir
+
+
+def ingest(model_run: str, asset_class: str, name: str, size_cm: Optional[float] = None,
+           out_dir: Path = ASSETS) -> Tuple[int, str, Path]:
+    """A passing model run -> <out>/<Name>/SM_<Name>.ma + T_<Name>_D/_N.png (needs mayapy).
+
+    Then the normal path: `artpipe build SM_<Name>.ma --class C --texture ...`.
+    """
+    c = conv.load()
+    cls = c.asset_class(asset_class)
+    run_dir = Path(model_run)
+    try:
+        status = json.loads((run_dir / "model.report.json").read_text(encoding="utf-8"))["status"]
+    except (OSError, ValueError, KeyError):
+        raise ToolError("%s has no readable model.report.json: run `artpipe gen model` first" % run_dir)
+    if status != "pass":
+        raise ToolError("the model in %s failed its checks: regenerate it before ingesting" % run_dir)
+    stem = "SM_" + name
+    check = c.naming.check("mesh_file", stem + ".fbx")
+    if not check.ok or stem.endswith("_LOD0"):
+        raise ToolError("--name %r: %s" % (name, check.message))
+    rules = gen_rules.load().ingest
+    if size_cm is None:
+        if asset_class not in rules.size_cm:
+            raise ToolError("no ingest.size_cm for class %s in generation.yaml: pass --size-cm" % asset_class)
+        size_cm = rules.size_cm[asset_class]
+    if not cls.size_cm_min <= size_cm <= cls.size_cm_max:
+        raise ToolError("size %s cm is outside %s's %s-%s cm" % (size_cm, asset_class, cls.size_cm_min,
+                                                                  cls.size_cm_max))
+    glb = read_glb(run_dir / "model.glb")
+    arrays = ingest_core.arrays(glb, size_cm, cls.pivot.mode)
+
+    from gen.ingest import build_scene
+    from validate.maya import session
+    session.start()
+    try:
+        scene = build_scene(arrays, name, out_dir / name,
+                            {"D": run_dir / "base_color.png", "N": run_dir / "normal.png"})
+    finally:
+        session.stop()
+    record = {"scene": report_path(scene), "asset_class": asset_class, "size_cm": size_cm,
+              "pivot_mode": cls.pivot.mode, "scale_from_glb": round(arrays.scale, 6),
+              "dropped_degenerate_triangles": arrays.dropped,
+              "model_run": {"path": report_path(run_dir / "manifest.json"),
+                            "sha256": sha256_file(run_dir / "manifest.json")},
+              "textures": sorted(report_path(p) for p in (out_dir / name).glob("T_*.png"))}
+    (out_dir / name / "ingest.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n",
+                                                encoding="utf-8")
+    return EXIT_OK, "OK %s" % report_path(scene), out_dir / name
+
+
 def server(action: str, env: Mapping[str, str] = os.environ) -> Tuple[int, str]:
     rules = gen_rules.load().comfyui
     if action == "start":
@@ -244,6 +373,18 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     k.add_argument("--seed", type=int, default=0)
     k.add_argument("--out", default=str(RUNS))
     k.add_argument("--keep-server", action="store_true")
+    m = sub.add_parser("model", help="image to textured low-poly GLB at the class budgets + model checks")
+    m.add_argument("source", help="a concept run folder (out/gen/runs/concept_zimage-...) or an image")
+    m.add_argument("--class", dest="asset_class", required=True)
+    m.add_argument("--seed", type=int, default=56)
+    m.add_argument("--out", default=str(RUNS))
+    m.add_argument("--keep-server", action="store_true")
+    i = sub.add_parser("ingest", help="a passing model run -> Maya scene + textures (mayapy)")
+    i.add_argument("model_run", help="out/gen/runs/model_trellis2-...")
+    i.add_argument("--class", dest="asset_class", required=True)
+    i.add_argument("--name", required=True, help="asset name, e.g. Coin -> SM_Coin.ma, T_Coin_D.png")
+    i.add_argument("--size-cm", type=float, default=None, help="largest dimension (default: per class)")
+    i.add_argument("--out", default=str(ASSETS))
     s = sub.add_parser("server", help="start/stop/status of the pipeline's ComfyUI")
     s.add_argument("action", choices=("start", "stop", "status"))
     return p.parse_args(argv)
@@ -255,12 +396,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.command == "run":
             pairs = ["%s=%s" % (name, value) for name, value in args.param]
             code, message = run(args.workflow, pairs, Path(os.path.abspath(args.out)), args.keep_server)
+        elif args.command == "model":
+            code, message, _ = model(args.source, args.asset_class, args.seed,
+                                     Path(os.path.abspath(args.out)), args.keep_server)
+        elif args.command == "ingest":
+            code, message, _ = ingest(args.model_run, args.asset_class, args.name, args.size_cm,
+                                      Path(os.path.abspath(args.out)))
         elif args.command == "concept":
             code, message, _ = concept(args.subject, args.asset_class, args.style, args.seed,
                                        Path(os.path.abspath(args.out)), args.keep_server)
         else:
             code, message = server(args.action)
-    except (ToolError, gen_rules.ConventionError, KeyError) as exc:
+    except (ToolError, gen_rules.ConventionError, KeyError, GlbError) as exc:
         code, message = EXIT_TOOL_ERROR, str(exc).strip("'\"")
     print("artpipe gen: %s" % message, file=sys.stdout if code == EXIT_OK else sys.stderr)
     return code

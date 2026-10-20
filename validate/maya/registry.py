@@ -23,11 +23,13 @@ from validate.maya.checks import (
     topology_ngons,
     topology_non_manifold,
     topology_open_borders,
+    topology_winding,
     transform_frozen,
     transform_pivot,
     transform_size,
     uv_overlap,
     uv_present,
+    uv_texel_density,
     uv_unit_square,
 )
 from validate.maya.fixes import naming_convention as fix_naming_convention
@@ -35,6 +37,7 @@ from validate.maya.fixes import scene_history as fix_scene_history
 from validate.maya.fixes import scene_units as fix_scene_units
 from validate.maya.fixes import topology_inverted as fix_topology_inverted
 from validate.maya.fixes import topology_lamina_faces as fix_topology_lamina_faces
+from validate.maya.fixes import topology_winding as fix_topology_winding
 from validate.maya.fixes import transform_frozen as fix_transform_frozen
 from validate.maya.fixes import transform_pivot as fix_transform_pivot
 from validate.maya.fixes import uv_present as fix_uv_present
@@ -46,6 +49,7 @@ CHECKS = (
     topology_lamina_faces,
     topology_open_borders,
     topology_inverted,
+    topology_winding,
     topology_ngons,
     # budget
     budget_tris,
@@ -55,6 +59,7 @@ CHECKS = (
     uv_present,
     uv_unit_square,
     uv_overlap,
+    uv_texel_density,
     # transforms & scale
     scene_units,
     transform_frozen,
@@ -67,13 +72,15 @@ CHECKS = (
 
 # Fixes, in the order they are APPLIED. Order matters:
 #   1. geometry (delete, bake, reverse) first, so later fixes see the final topology.
-#      Reverse after the bake, so the reversal never lands inside live history
+#      Reverse after the bake, so the reversal never lands inside live history.
+#      Winding before inverted: make each shell consistent, then judge the whole mesh
 #   2. data on the mesh (UV sets), then scene settings (units)
 #   3. freeze BEFORE pivot: the pivot fix refuses to move unfrozen geometry
 #   4. renames last, so every earlier fix worked on the original names
 FIXES = (
     fix_topology_lamina_faces,
     fix_scene_history,
+    fix_topology_winding,
     fix_topology_inverted,
     fix_uv_present,
     fix_scene_units,

@@ -17,6 +17,7 @@ STYLES_FILE = "gen_styles.yaml"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _MODEL_ID = re.compile(r"^[a-z][a-z0-9_]*$")
+_CHECK_ID = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 
 
 @dataclass(frozen=True)
@@ -53,10 +54,37 @@ class ConceptRules:
 
 
 @dataclass(frozen=True)
+class ModelRules:
+    """Image-to-3D settings (gen.cli model)."""
+    face_budget_share: float
+    remesh_resolution: int
+    uv_overlap_max_share: float
+
+    def target_faces(self, tris_max: int) -> int:
+        return max(1, int(tris_max * self.face_budget_share))
+
+
+@dataclass(frozen=True)
+class IngestRules:
+    size_cm: Dict[str, float]  # largest dimension per asset class
+
+
+@dataclass(frozen=True)
+class RepairRules:
+    max_attempts: int
+    seed_step: int
+    default: str
+    actions: Dict[str, str]
+
+
+@dataclass(frozen=True)
 class GenerationRules:
     comfyui: ComfyRules
     models: Dict[str, ModelPin]
     concept: ConceptRules
+    model: ModelRules
+    ingest: IngestRules
+    repair: RepairRules
 
 
 @dataclass(frozen=True)
@@ -130,8 +158,35 @@ def parse(data: dict) -> GenerationRules:
     k.done()
     if concept.coverage_min >= concept.coverage_max:
         raise ConventionError("%s.concept: coverage_min must be < coverage_max" % FILE)
+    mr = root.sub("model")
+    model = ModelRules(_share(mr, "face_budget_share"), _positive(mr, "remesh_resolution"),
+                       _share(mr, "uv_overlap_max_share"))
+    mr.done()
+    if model.face_budget_share == 0:
+        raise ConventionError("%s.model.face_budget_share: must be > 0" % FILE)
+    ir = root.sub("ingest")
+    sizes = {}
+    for name, value in sorted(ir.get("size_cm", dict).items()):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+            raise ConventionError("%s.ingest.size_cm.%s: expected a size > 0" % (FILE, name))
+        sizes[name] = float(value)
+    ir.done()
+    rr = root.sub("repair")
+    repair = RepairRules(_positive(rr, "max_attempts"), _positive(rr, "seed_step"),
+                         _action(rr.where + ".default", rr.get("default", str)), {})
+    for cid, action in sorted(rr.get("actions", dict).items()):
+        if not _CHECK_ID.match(str(cid)):
+            raise ConventionError("%s.actions.%s: not a check id (category.name)" % (rr.where, cid))
+        repair.actions[cid] = _action("%s.actions.%s" % (rr.where, cid), action)
+    rr.done()
     root.done()
-    return GenerationRules(comfy, models, concept)
+    return GenerationRules(comfy, models, concept, model, IngestRules(sizes), repair)
+
+
+def _action(where: str, value) -> str:
+    if value not in ("retry", "stop"):
+        raise ConventionError("%s: expected retry or stop, got %r" % (where, value))
+    return value
 
 
 def _byte(r: _Reader, key: str) -> int:

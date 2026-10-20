@@ -70,6 +70,8 @@ class UVRules:
     required_sets: Tuple[str, ...]
     unit_square: bool
     overlap_allowed: bool
+    # uv.texel_density: pixels per metre at the class's max texture size; 0 = no minimum.
+    texel_density_min_px_per_m: float
 
 
 @dataclass(frozen=True)
@@ -285,8 +287,10 @@ def _parse_class(name: str, raw: Dict[str, Any], tex_sizes: Dict[str, int], wher
 
     ur = r.sub("uv")
     uv = UVRules(tuple(ur.get("required_sets", list)), ur.get("unit_square", bool),
-                 ur.get("overlap_allowed", bool))
+                 ur.get("overlap_allowed", bool), ur.get("texel_density_min_px_per_m", float))
     ur.done()
+    if uv.texel_density_min_px_per_m < 0:
+        raise ConventionError("%s.uv.texel_density_min_px_per_m: must be >= 0" % where)
 
     overrides = []
     for check_id, sev in sorted(r.get("severity_overrides", dict).items()):

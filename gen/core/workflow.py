@@ -32,7 +32,10 @@ from gen.core import ToolError
 from gen.core.rules import GenerationRules, ModelPin
 
 WORKFLOW_DIR = Path(__file__).resolve().parents[1] / "workflows"
-PARAM_TYPES = {"int": int, "float": float, "str": str}
+# "file": a local file path. The harness copies the file into ComfyUI's input
+# folder under its own sha256 (gen.cli.stage_inputs), so the graph -- and the
+# run id -- carry the file's content hash, never a machine path.
+PARAM_TYPES = {"int": int, "float": float, "str": str, "file": str}
 _ID = re.compile(r"^[a-z][a-z0-9_]*$")
 # String inputs that name a model file. Any such value in the graph must be a
 # declared, pinned model: an undeclared file would run unhashed.

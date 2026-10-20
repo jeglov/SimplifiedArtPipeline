@@ -54,6 +54,39 @@ models:
     licence: MIT
     source: https://huggingface.co/Comfy-Org/BiRefNet/resolve/25511f8787e51912e1480706b4e47b8f467fbf72/background_removal/birefnet.safetensors
 
+  # TRELLIS.2 (microsoft/TRELLIS.2-4B, MIT), ComfyUI repacks: the int8 flow
+  # model from Comfy-Org/TRELLIS.2 at 430a9d09, the VAEs and the image
+  # encoder from Comfy-Org/Pixal3D at f37641be (the files ComfyUI's official
+  # TRELLIS.2 template loads).
+  trellis2_int8:
+    folder: diffusion_models
+    file: trellis_2_int8_convrot.safetensors
+    sha256: d01952ad137213f6a868f86b6b877026276f84af5eec23069217475a0bad3a31
+    licence: MIT
+    source: https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/430a9d09b2416687018c8fe8edced2ad4858a439/diffusion_models/trellis_2_int8_convrot.safetensors
+  trellis2_shape_vae:
+    folder: vae
+    file: trellis_2_shape_vae_bf16.safetensors
+    sha256: de0cb4949a76c59ee5c091a995a69bcc8c51d5aeda939f0c641a50d2a72341f4
+    licence: MIT
+    source: https://huggingface.co/Comfy-Org/Pixal3D/resolve/f37641be376725d324c56626007cc477f1249a69/vae/trellis_2_shape_vae_bf16.safetensors
+  trellis2_texture_vae:
+    folder: vae
+    file: trellis_2_texture_vae_bf16.safetensors
+    sha256: 714e5ebf094a610e12a8e3b5175c18a62f37f6ea4218acb6073644456b73ab0e
+    licence: MIT
+    source: https://huggingface.co/Comfy-Org/Pixal3D/resolve/f37641be376725d324c56626007cc477f1249a69/vae/trellis_2_texture_vae_bf16.safetensors
+  # Meta's DINOv3 ViT-L. The repack's card says MIT; the weights are under the
+  # DINOv3 License (commercial use allowed, outputs unrestricted; redistributing
+  # the weights needs the licence text and "Built with DINOv3"). The upstream
+  # licence is what counts.
+  dino_v3_vitl:
+    folder: clip_vision
+    file: dino_v3_L_naf_fp32.safetensors
+    sha256: 4ad2ec4e0879a5b5b04cd97325cc37da954a7b6edca5170b86510f17f2b2290f
+    licence: DINOv3-License
+    source: https://huggingface.co/Comfy-Org/Pixal3D/resolve/f37641be376725d324c56626007cc477f1249a69/clip_vision/dino_v3_L_naf_fp32.safetensors
+
 # Concept image checks (gen.core.concept): is this image usable for
 # image-to-3D? Both the image and its BiRefNet mask are sampled on a grid
 # (cheap, and robust to single-pixel noise). The background check reads the
@@ -79,3 +112,56 @@ concept:
   single_object_min: 0.95
   # Object regions smaller than this many grid cells are ignored as specks.
   speck_cells: 4
+
+# Image to 3D (gen.cli model, workflow model_trellis2). Probed on the coin:
+# the raw TRELLIS.2 mesh is ~19.6M triangles, so it is remeshed coarse
+# first, then decimated with QEM placement to the class budget.
+model:
+  # Decimation target = tris_max x this. QEM lands at or a little under the
+  # target; the margin leaves room for the Maya fixes (e.g. triangulating).
+  face_budget_share: 0.9
+  # Remesh grid before decimation. 128 gave ~113k closed, manifold triangles
+  # on the coin and kept the star relief at 270 triangles; it is also the
+  # high-poly the normal map is baked from.
+  remesh_resolution: 128
+  # model.uv_overlap: the baked texture may share at most this share of its
+  # used UV area between triangles. Probed on the first six models: the
+  # overlap is a fold INSIDE a chart (2 triangles on the cactus at every
+  # packing resolution from 256 to 2048, and with the "adaptive" segmenter),
+  # so it can't be packed away. Measured shares: cactus 0.03 % (~11 texels at
+  # 256 px, invisible), heart 0.65 %, coin 2.5 %, crate 3.0 % (visible bake
+  # errors). 0.5 % is ~160 texels at 256 px.
+  uv_overlap_max_share: 0.005
+
+# Ingest into Maya (gen.cli ingest). Image-to-3D outputs have no real size
+# (every mesh is ~1 unit), so the largest dimension is set per class. Must
+# sit inside the class's size_cm range in mesh_budgets.yaml (checked at use).
+ingest:
+  size_cm:
+    pickup: 40       # a coin or gem read from a phone-camera distance
+    prop_small: 60   # crate, cone, potted plant
+
+# The repair loop (gen.core.repair): what a failed stage does next. The first
+# blocking failure in the stage's report picks the action:
+#   retry  same stage, next seed (seed = base + attempt_index x seed_step)
+#   stop   hand over to a human: another seed can't fix it
+# A tool error (exit 2) always stops. Every attempt is recorded in the
+# generate report.
+repair:
+  max_attempts: 3          # per stage: a model attempt costs ~4 GPU minutes on 8 GB
+  seed_step: 1000
+  default: stop            # an unlisted check id: don't guess
+  actions:
+    # Concept image: the framing is a dice roll; a new seed usually fixes it.
+    concept.background: retry
+    concept.coverage: retry
+    concept.margin: retry
+    concept.single_object: retry
+    # Image to 3D: decimation and unwrap results vary by seed (probed: one
+    # heart had 1 non-manifold edge, one coin overlapped 42 UV triangles).
+    model.closed: retry
+    model.manifold: retry
+    model.uv: retry
+    model.uv_overlap: retry
+    model.triangles: stop  # the decimation target is the budget: over it means a workflow bug
+    model.textures: stop   # the workflow didn't bake: a workflow bug, not bad luck
