@@ -1,11 +1,17 @@
 """gen.core.repair: the bounded, deterministic repair loop. Pure Python, <1 s."""
 from __future__ import annotations
 
+import json
+import re
+
+import jsonschema
 import pytest
 
+from gen import cli
+from gen.core import ToolError
 from gen.core import repair
 from gen.core import rules as gr
-from validate.core.conventions import ConventionError
+from validate.core.conventions import DEFAULT_DIR, ConventionError
 
 POLICY = repair.Policy(max_attempts=3, seed_step=1000,
                        actions={"model.closed": "retry", "model.textures": "stop"}, default="stop")
@@ -25,7 +31,8 @@ def scripted(outcomes):
     def fn(seed):
         seeds.append(seed)
         code, rep = outcomes[len(seeds) - 1]
-        return code, rep, "run%d/report.json" % len(seeds)
+        n = len(seeds)
+        return repair.Outcome(code, rep, "run%d/report.json" % n if rep else None, "run%d" % n, 60.0)
     return fn, seeds
 
 
@@ -81,7 +88,162 @@ def test_attempts_serialise():
     _, attempts = repair.run("concept", 1, POLICY, fn)
     assert attempts[1].to_dict() == {"stage": "concept", "attempt": 2, "seed": 1001, "exit_code": 0,
                                      "report": "run2/report.json", "failed": [], "decision": "accept",
-                                     "reason": "all blocking checks pass"}
+                                     "reason": "all blocking checks pass", "run": "run2", "seconds": 60.0,
+                                     "reused": False, "message": ""}
+
+
+# --- the record -----------------------------------------------------------------------
+
+RECORD_SCHEMA = jsonschema.Draft202012Validator(
+    json.loads((DEFAULT_DIR / "gen_repair.schema.json").read_text(encoding="utf-8")))
+REQUEST = {"image_sha256": "a" * 64, "asset_class": "pickup", "base_seed": 56}
+
+
+def test_record_matches_its_schema_for_every_ending():
+    for outcomes in ([(0, report())], [(1, report("model.closed"))] * 3, [(1, report("model.textures"))],
+                     [(2, None)]):
+        fn, _ = scripted(outcomes)
+        last, attempts = repair.run("model", 56, POLICY, fn)
+        rec = repair.record("model", REQUEST, POLICY, last, attempts)
+        errors = [e.message for e in RECORD_SCHEMA.iter_errors(rec)]
+        assert not errors, errors
+
+
+def test_record_exit_codes_and_accepted_run():
+    cases = [([(0, report())], 0, "run1"), ([(1, report("model.closed")), (0, report())], 0, "run2"),
+             ([(1, report("model.closed"))] * 3, 1, None), ([(1, report("model.textures"))], 1, None),
+             ([(2, None)], 2, None)]
+    for outcomes, code, accepted in cases:
+        fn, _ = scripted(outcomes)
+        rec = repair.record("model", REQUEST, POLICY, *repair.run("model", 56, POLICY, fn))
+        assert (rec["exit_code"], rec["accepted_run"]) == (code, accepted), outcomes
+
+
+def test_gpu_seconds_count_only_attempts_that_ran_now():
+    outs = iter([repair.Outcome(1, report("model.closed"), "r1", "run1", 240.0, reused=True),
+                 repair.Outcome(0, report(), "r2", "run2", 200.5)])
+    last, attempts = repair.run("model", 56, POLICY, lambda seed: next(outs))
+    s = repair.record("model", REQUEST, POLICY, last, attempts)["summary"]
+    assert s == {"attempts": 2, "reused": 1, "gpu_seconds": 200.5}
+
+
+def test_repair_id_is_stable_and_follows_the_request():
+    a = repair.repair_id("model", REQUEST)
+    assert a == repair.repair_id("model", dict(reversed(list(REQUEST.items()))))
+    assert a != repair.repair_id("model", dict(REQUEST, base_seed=57))
+    assert a != repair.repair_id("concept", REQUEST)
+    assert re.match(r"^model-[0-9a-f]{12}$", a)
+
+
+# --- gen.cli: the loop around a real stage function --------------------------------------
+
+def stage_report(*failed):
+    return {"status": "fail" if failed else "pass",
+            "results": [{"id": c, "passed": False, "severity": "error"} for c in failed]}
+
+
+class FakeStage:
+    """Stands in for gen.cli.model / concept: writes a run folder per seed."""
+
+    def __init__(self, tmp_path, verdicts, report_name="model.report.json"):
+        self.tmp, self.verdicts, self.name, self.seeds, self.keep = tmp_path, verdicts, report_name, [], []
+
+    def __call__(self, *args):
+        seed, out_dir, keep = args[-4], args[-3], args[-2]
+        self.seeds.append(seed)
+        self.keep.append(keep)
+        verdict = self.verdicts[len(self.seeds) - 1]
+        if isinstance(verdict, Exception):
+            raise verdict
+        run_dir = out_dir / ("run-%d" % seed)
+        run_dir.mkdir(parents=True)
+        (run_dir / self.name).write_text(json.dumps(stage_report(*verdict)), encoding="utf-8")
+        (run_dir / "manifest.json").write_text(json.dumps({"execution": {"seconds": 100.0}}), encoding="utf-8")
+        return (1 if verdict else 0), ("FAIL" if verdict else "PASS"), run_dir
+
+
+@pytest.fixture
+def no_server(monkeypatch):
+    calls = {"stop": 0}
+    monkeypatch.setattr(cli.comfy.Client, "stats", lambda self: None)
+
+    def stop(*a, **k):
+        calls["stop"] += 1
+        return True
+    monkeypatch.setattr(cli.comfy, "stop", stop)
+    return calls
+
+
+def write_image(tmp_path):
+    img = tmp_path / "concept.png"
+    img.write_bytes(b"\x89PNG fake")
+    return img
+
+
+def test_model_repair_retries_by_seed_and_writes_the_record(monkeypatch, tmp_path, no_server):
+    stage = FakeStage(tmp_path, [["model.uv_overlap"], ["model.manifold"], []])
+    monkeypatch.setattr(cli, "model", stage)
+    code, message, rec = cli.model_repaired(str(write_image(tmp_path)), "pickup", 56, tmp_path / "runs")
+    assert code == 0 and stage.seeds == [56, 1056, 2056] and all(stage.keep)
+    assert message.startswith("PASS after 3 attempt(s)") and rec["accepted_run"].endswith("run-2056")
+    (path,) = (tmp_path / "repairs").glob("model-*.json")
+    on_disk = json.loads(path.read_text(encoding="utf-8"))
+    assert on_disk == rec and not list(RECORD_SCHEMA.iter_errors(on_disk))
+    assert [a["failed"] for a in rec["attempts"]] == [["model.uv_overlap"], ["model.manifold"], []]
+    assert rec["summary"]["gpu_seconds"] == 300.0
+    assert no_server["stop"] == 1  # it wasn't up before: the loop stops what the attempts started
+
+
+def test_model_repair_hands_over_on_a_stop_check(monkeypatch, tmp_path, no_server):
+    stage = FakeStage(tmp_path, [["model.textures"]])
+    monkeypatch.setattr(cli, "model", stage)
+    code, message, rec = cli.model_repaired(str(write_image(tmp_path)), "pickup", 56, tmp_path / "runs")
+    assert code == 1 and stage.seeds == [56] and message.startswith("HANDED OVER after 1 attempt(s)")
+
+
+def test_a_tool_error_in_a_stage_is_recorded_not_raised(monkeypatch, tmp_path, no_server):
+    stage = FakeStage(tmp_path, [ToolError("the concept image in X failed its checks")])
+    monkeypatch.setattr(cli, "model", stage)
+    code, message, rec = cli.model_repaired(str(write_image(tmp_path)), "pickup", 56, tmp_path / "runs")
+    assert code == 2 and message.startswith("ERROR") and stage.seeds == [56]
+    assert rec["attempts"][0]["message"] == "the concept image in X failed its checks"
+    assert rec["attempts"][0]["report"] is None
+
+
+def test_a_server_that_was_already_up_is_left_running(monkeypatch, tmp_path, no_server):
+    monkeypatch.setattr(cli.comfy.Client, "stats", lambda self: {"system": {}})
+    monkeypatch.setattr(cli, "model", FakeStage(tmp_path, [[]]))
+    cli.model_repaired(str(write_image(tmp_path)), "pickup", 56, tmp_path / "runs")
+    assert no_server["stop"] == 0
+
+
+def test_keep_server_leaves_it_running(monkeypatch, tmp_path, no_server):
+    monkeypatch.setattr(cli, "model", FakeStage(tmp_path, [[]]))
+    cli.model_repaired(str(write_image(tmp_path)), "pickup", 56, tmp_path / "runs", keep_server=True)
+    assert no_server["stop"] == 0
+
+
+def test_the_server_is_stopped_even_when_a_stage_crashes(monkeypatch, tmp_path, no_server):
+    monkeypatch.setattr(cli, "model", FakeStage(tmp_path, [RuntimeError("bug")]))
+    with pytest.raises(RuntimeError):
+        cli.model_repaired(str(write_image(tmp_path)), "pickup", 56, tmp_path / "runs")
+    assert no_server["stop"] == 1
+
+
+def test_concept_repair_uses_the_concept_report(monkeypatch, tmp_path, no_server):
+    stage = FakeStage(tmp_path, [["concept.margin"], []], "concept.report.json")
+    monkeypatch.setattr(cli, "concept", stage)
+    code, _, rec = cli.concept_repaired("a coin", "pickup", "casual_toon", 1, tmp_path / "runs")
+    assert code == 0 and stage.seeds == [1, 1001] and rec["stage"] == "concept"
+    assert rec["request"] == {"subject": "a coin", "asset_class": "pickup", "style": "casual_toon",
+                              "base_seed": 1}
+
+
+def test_cli_flag_selects_the_loop(monkeypatch, tmp_path, no_server):
+    monkeypatch.setattr(cli, "model", FakeStage(tmp_path, [["model.closed"], []]))
+    assert cli.main(["model", str(write_image(tmp_path)), "--class", "pickup", "--repair",
+                     "--out", str(tmp_path / "runs")]) == 0
+    assert len(list((tmp_path / "repairs").glob("*.json"))) == 1
 
 
 # --- conventions ----------------------------------------------------------------------

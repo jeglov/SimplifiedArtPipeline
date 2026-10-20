@@ -337,10 +337,60 @@ triangles, 173 px/m at 256 px). The only Unity finding is the
   classes 0 until measured. The default polySphere's lat-long UVs trip the
   2x rule at the poles, which is true, so the sphere fixtures expect it.
 
-## The repair loop (engine only, step 3.6 in progress)
+## The repair loop: `--repair`
 
-`gen/core/repair.py` and `repair` in `generation.yaml`: the first blocking
-failure picks retry (next seed: base + n x 1000) or stop, bounded by
-`max_attempts` (3); a tool error always stops; every attempt is recorded.
-Tested with scripted stages. Not wired into a command yet: `artpipe generate`
-(step 3.7) runs concept -> model -> ingest -> build through it.
+```
+artpipe gen model out/gen/runs/concept_zimage-6439e1ea90da --class pickup --repair
+# artpipe gen: PASS after 2 attempt(s): all blocking checks pass. See out/gen/repairs/model-e580766c090a.json -> out/gen/runs/model_trellis2-0f90f99d6a35
+```
+
+`gen concept --repair` and `gen model --repair` run the stage through
+`gen/core/repair.py` with the policy in `generation.yaml` `repair`:
+
+* The **first blocking failure** in the stage's report picks the action:
+  `retry` (framing, closed, manifold, UV checks: a new seed changes them) or
+  `stop` (`model.triangles`, `model.textures`: the workflow is wrong, a seed
+  won't fix it). An unlisted check id stops (`default: stop`): the policy
+  never guesses.
+* **Seeds are a fixed sequence**, base + n x 1000, so attempt 3 is the same
+  request on every machine, and an earlier attempt is reused from its run
+  folder instead of spending GPU time again.
+* **Bounded**: 3 attempts per stage (a model attempt is ~4 GPU minutes on
+  8 GB). Then it hands over: exit 1, with every attempt on record.
+* **A tool error always stops** (exit 2): a missing model, a refused graph,
+  or a failed concept passed to the model stage. Recorded, not raised.
+* **Every attempt is recorded** in `out/gen/repairs/<repair_id>.json`
+  (`conventions/gen_repair.schema.json`): seed, run folder, report, the
+  blocking checks that failed, the decision and why, ComfyUI seconds, and
+  whether the run was reused. `repair_id` hashes the stage and the request
+  (inputs by sha256 + base seed): the same request always maps to one record.
+* The server stays up between attempts (a cold start is ~15 s) and is
+  stopped at the end, unless it was already running or `--keep-server`.
+
+**Measured on the three first-pass failures** (RTX 3070 Laptop, base seed
+56, attempt 1 reused from the step 3.4 batch):
+
+| Asset | Seed 56 (step 3.4) | Seed 1056 | Seed 2056 | Result |
+|---|---|---|---|---|
+| coin | UV overlap 2.50 % | pass (212 s) | | **accepted**, attempt 2 |
+| heart | 1 non-manifold edge, UV overlap 0.65 % | pass (102 s) | | **accepted**, attempt 2 |
+| crate | 9 open edges, 1 non-manifold, UV overlap 2.98 % | 3 open edges, UV overlap 1.91 % (458 s) | closed and manifold, UV overlap **5.52 %** (447 s) | **handed over** after 3 |
+
+Yield over the six step-3.4 concepts: **3 of 6 first pass** (gem, cone,
+cactus) and **5 of 6 after repair**, for 20 GPU minutes of retries. The
+crate is the honest failure: every seed fixes more of its topology, and the
+last one looks right in the contact sheet, but its thin slats fold inside
+their UV charts at every seed (1.9 to 5.5 % shared area). That is a
+structural problem of thin parts at a 500-triangle budget, not bad luck, and
+the loop does what it should: it stops after three and hands over with every
+attempt on record, instead of burning GPU time. Escalation (a finer remesh,
+re-unwrapping the folded charts, a new concept) is backlog #53.
+
+(The cactus's stored step-3.4 report said fail: it predates the 0.5 %
+overlap rule. Re-checking the reused run gives pass, 0.03 %.)
+
+The contact sheet (concept + three textured views per attempt) agrees with
+the checks: the heart's seed-56 model has torn faces and holes, seed 1056 is
+a clean closed heart; the coin's retry keeps the star relief; the crate's
+split slats show where the folds are.
+

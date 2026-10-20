@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/artpipe/artpipe/conventions/gen_repair.schema.json",
+  "title": "artpipe repair record",
+  "description": "Written by `artpipe gen concept|model --repair` and `artpipe generate` (out/gen/repairs/<repair_id>.json): every attempt of one generation stage under the repair policy of conventions/generation.yaml, with the seed, the run, the blocking checks that failed and the decision taken. repair_id hashes the stage and the request (inputs + base seed), so the same request always maps to one record. Timings vary between runs; decisions and seeds do not.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tool", "repair_id", "stage", "request", "policy", "decision", "reason", "exit_code", "accepted_run", "attempts", "summary"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "tool": { "const": "artpipe.gen.repair" },
+    "repair_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*-[0-9a-f]{12}$" },
+    "stage": { "enum": ["concept", "model"] },
+    "request": { "type": "object", "required": ["base_seed"], "properties": { "base_seed": { "type": "integer" } } },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_attempts", "seed_step", "default", "actions"],
+      "properties": {
+        "max_attempts": { "type": "integer", "minimum": 1 },
+        "seed_step": { "type": "integer", "minimum": 1 },
+        "default": { "$ref": "#/$defs/action" },
+        "actions": { "type": "object", "additionalProperties": { "$ref": "#/$defs/action" } }
+      }
+    },
+    "decision": { "enum": ["accept", "stop"] },
+    "reason": { "type": "string", "minLength": 1 },
+    "exit_code": { "description": "0 accepted / 1 handed over with a failing asset / 2 the stage's tool broke", "enum": [0, 1, 2] },
+    "accepted_run": { "type": ["string", "null"], "description": "Run folder of the accepted attempt; null unless decision is accept" },
+    "attempts": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/attempt" } },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempts", "reused", "gpu_seconds"],
+      "properties": {
+        "attempts": { "type": "integer", "minimum": 1 },
+        "reused": { "type": "integer", "minimum": 0, "description": "Attempts answered by an identical earlier run (no GPU time)" },
+        "gpu_seconds": { "type": "number", "minimum": 0, "description": "ComfyUI execution time of the attempts that ran now" }
+      }
+    }
+  },
+  "$defs": {
+    "action": { "enum": ["retry", "stop"] },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "attempt", "seed", "exit_code", "report", "failed", "decision", "reason", "run", "seconds", "reused", "message"],
+      "properties": {
+        "stage": { "type": "string" },
+        "attempt": { "type": "integer", "minimum": 1 },
+        "seed": { "type": "integer" },
+        "exit_code": { "enum": [0, 1, 2] },
+        "report": { "type": ["string", "null"], "description": "The stage's report (report.schema.json); null on a tool error" },
+        "failed": { "type": "array", "items": { "type": "string", "pattern": "^[a-z_]+\\.[a-z_]+$" }, "description": "Blocking (error) checks that failed, in report order; the first one picks the action" },
+        "decision": { "enum": ["accept", "retry", "stop"] },
+        "reason": { "type": "string", "minLength": 1 },
+        "run": { "type": ["string", "null"] },
+        "seconds": { "type": ["number", "null"] },
+        "reused": { "type": "boolean" },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

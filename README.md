@@ -85,8 +85,8 @@ runner uses the exact version pinned in `unity/ProjectSettings` (or `%UNITY%`).
 | `artpipe unity verify` | re-check every asset under `Assets/Art` from the files, with no import cache |
 | `artpipe unity setup\|test` | one-time project setup; Unity EditMode tests |
 | `artpipe gen run WORKFLOW [--param NAME VALUE ...]` | generation stage: run a workflow from `gen/workflows/` on the pinned, headless ComfyUI; outputs plus a provenance manifest in `out/gen/runs/<run_id>/` |
-| `artpipe gen concept "SUBJECT" --class C --style S [--seed N]` | concept image (Z-Image-Turbo, prompt from the game's style in `conventions/gen_styles.yaml`) plus its foreground mask, checked for image-to-3D: plain background, coverage, margin, one object |
-| `artpipe gen model CONCEPT_RUN --class C` | image to textured low-poly GLB at the class budgets (TRELLIS.2), checked: budget, closed, manifold, UVs, UV overlap, hidden inner shells |
+| `artpipe gen concept "SUBJECT" --class C --style S [--seed N] [--repair]` | concept image (Z-Image-Turbo, prompt from the game's style in `conventions/gen_styles.yaml`) plus its foreground mask, checked for image-to-3D: plain background, coverage, margin, one object |
+| `artpipe gen model CONCEPT_RUN --class C [--seed N] [--repair]` | image to textured low-poly GLB at the class budgets (TRELLIS.2), checked: budget, closed, manifold, UVs, UV overlap, hidden inner shells. `--repair` (also on `concept`): retry failed checks with the next seed per the policy in `generation.yaml`, at most 3 attempts, every attempt in `out/gen/repairs/` |
 | `artpipe gen ingest MODEL_RUN --class C --name N` | GLB to a Maya scene (`SM_N.ma` + `T_N_D/N.png`), sized and placed for the class; then `artpipe build` as for any asset |
 | `artpipe texture FILE... [--class C]` | the Unity texture rules in Python, before a texture reaches Unity (same check ids) |
 | `artpipe gen server start\|stop\|status` | the pipeline's own ComfyUI server (keep it up for a batch: startup is ~15 s) |
@@ -141,6 +141,6 @@ Known gaps and deferred work are tracked in [docs/backlog.md](docs/backlog.md).
 
 1. **Conventions + Maya validators**: done
 2. **Unity import pipeline**: done (gate, import rules, GPU budgets, textures, batchmode, end to end)
-3. **AI generation stage**: in progress. Text to concept image to TRELLIS.2 mesh to Maya to Unity works end to end (step by step); next: the repair loop and `artpipe generate`
+3. **AI generation stage**: in progress. Text to concept image to TRELLIS.2 mesh to Maya to Unity works end to end (step by step), with a bounded repair loop (`--repair`); next: `artpipe generate`
 4. Animated store banners at scale: one template → many games
 5. MCP agent layer + docs + demo video

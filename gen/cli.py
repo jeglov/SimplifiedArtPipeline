@@ -1,8 +1,8 @@
 """Run a generation workflow on the pinned ComfyUI and record its provenance.
 
     artpipe gen run WORKFLOW [--param NAME VALUE ...] [--out DIR] [--keep-server]
-    artpipe gen concept "SUBJECT" --class C --style S [--seed N] [--out DIR] [--keep-server]
-    artpipe gen model CONCEPT_RUN_OR_IMAGE --class C [--seed N] [--out DIR] [--keep-server]
+    artpipe gen concept "SUBJECT" --class C --style S [--seed N] [--repair] [--out DIR] [--keep-server]
+    artpipe gen model CONCEPT_RUN_OR_IMAGE --class C [--seed N] [--repair] [--out DIR] [--keep-server]
     artpipe gen ingest MODEL_RUN --class C --name Name [--size-cm N] [--out DIR]
     artpipe gen server start|stop|status
 
@@ -17,6 +17,11 @@ ComfyUI: same request, same files. Delete the folder to regenerate.
 
 `run` starts the server if it isn't up and stops it afterwards, unless
 --keep-server (or `server start` before a batch: startup is ~15 s).
+
+--repair runs concept or model through the repair loop (gen/core/repair.py,
+policy in generation.yaml `repair`): a failed check retries with seed
+base + n x seed_step, or hands over; every attempt goes to
+<out>/../repairs/<repair_id>.json (conventions/gen_repair.schema.json).
 
 Exit codes: 0 files generated / 2 tool error (bad workflow, missing or
 changed model, ComfyUI refused or failed the graph). 1 ("the asset is bad")
@@ -33,7 +38,7 @@ import struct
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from gen import comfy
 from gen.core import ToolError
@@ -44,6 +49,7 @@ from gen.core import workflow as wfl
 from gen.core import concept as concept_checks
 from gen.core import ingest as ingest_core
 from gen.core import model as model_checks
+from gen.core import repair
 from gen.core.rules import ModelPin
 from validate.core import conventions as conv
 from validate.core.glb import GlbError
@@ -60,6 +66,7 @@ CONCEPT_WORKFLOW = "concept_zimage"
 CONCEPT_TOOL = "artpipe.gen.concept"
 MODEL_WORKFLOW = "model_trellis2"
 MODEL_TOOL = "artpipe.gen.model"
+CONCEPT_STAGE, MODEL_STAGE = "concept", "model"
 
 
 def sha256_file(path: Path) -> str:
@@ -221,6 +228,12 @@ def _collect(client: comfy.Client, ex: hist.Execution, wf: wfl.Workflow, run_dir
     return outputs
 
 
+def _verdict(report: Report, path: Path, generate_message: str) -> str:
+    """"PASS out/.../x.report.json", with "(reused)" when generation reused an earlier run."""
+    reused = " (reused)" if generate_message.startswith("OK (reused)") else ""
+    return "%s%s %s" % (report.status.value.upper(), reused, report_path(path))
+
+
 def concept(subject: str, asset_class: str, style: str, seed: int = 0, out_dir: Path = RUNS,
             keep_server: bool = False, env: Mapping[str, str] = os.environ) -> Tuple[int, str, Path]:
     """Concept image for one asset, then the image-to-3D suitability checks.
@@ -246,7 +259,7 @@ def concept(subject: str, asset_class: str, style: str, seed: int = 0, out_dir: 
         report = Report(shown, sha256_file(image), asset_class, tool_error=str(exc), tool=CONCEPT_TOOL)
     out = run_dir / "concept.report.json"
     out.write_text(report.to_json(), encoding="utf-8")
-    return report.exit_code, "%s %s" % (report.status.value.upper(), report_path(out)), run_dir
+    return report.exit_code, _verdict(report, out, message), run_dir
 
 
 def model(source: str, asset_class: str, seed: int = 56, out_dir: Path = RUNS,
@@ -289,7 +302,17 @@ def model(source: str, asset_class: str, seed: int = 56, out_dir: Path = RUNS,
                         tool_error="unreadable GLB: %s" % exc, tool=MODEL_TOOL)
     out = run_dir / "model.report.json"
     out.write_text(report.to_json(), encoding="utf-8")
-    return report.exit_code, "%s %s" % (report.status.value.upper(), report_path(out)), run_dir
+    return report.exit_code, _verdict(report, out, message), run_dir
+
+
+def check_name(name: str, c: Optional[conv.Conventions] = None) -> str:
+    """--name -> "SM_<Name>", or ToolError: checked before any GPU time is spent."""
+    c = c or conv.load()
+    stem = "SM_" + name
+    check = c.naming.check("mesh_file", stem + ".fbx")
+    if not check.ok or stem.endswith("_LOD0"):
+        raise ToolError("--name %r: %s" % (name, check.message))
+    return stem
 
 
 def ingest(model_run: str, asset_class: str, name: str, size_cm: Optional[float] = None,
@@ -307,10 +330,7 @@ def ingest(model_run: str, asset_class: str, name: str, size_cm: Optional[float]
         raise ToolError("%s has no readable model.report.json: run `artpipe gen model` first" % run_dir)
     if status != "pass":
         raise ToolError("the model in %s failed its checks: regenerate it before ingesting" % run_dir)
-    stem = "SM_" + name
-    check = c.naming.check("mesh_file", stem + ".fbx")
-    if not check.ok or stem.endswith("_LOD0"):
-        raise ToolError("--name %r: %s" % (name, check.message))
+    stem = check_name(name, c)
     rules = gen_rules.load().ingest
     if size_cm is None:
         if asset_class not in rules.size_cm:
@@ -339,6 +359,77 @@ def ingest(model_run: str, asset_class: str, name: str, size_cm: Optional[float]
     (out_dir / name / "ingest.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n",
                                                 encoding="utf-8")
     return EXIT_OK, "OK %s" % report_path(scene), out_dir / name
+
+
+def _outcome(call: Callable[[], Tuple[int, str, Path]], report_name: str) -> repair.Outcome:
+    """One stage run as the repair loop sees it. A ToolError is an outcome (exit 2), not a crash."""
+    try:
+        code, message, run_dir = call()
+    except (ToolError, gen_rules.ConventionError, GlbError) as exc:
+        return repair.Outcome(EXIT_TOOL_ERROR, message=str(exc).strip("'\""))
+    report = _read_json(run_dir / report_name) if code != EXIT_TOOL_ERROR else None
+    execution = (_read_json(run_dir / "manifest.json") or {}).get("execution") or {}
+    return repair.Outcome(code, report, report_path(run_dir / report_name) if report else None,
+                          report_path(run_dir), execution.get("seconds"), "(reused)" in message, message)
+
+
+def _read_json(path: Path) -> Optional[Dict[str, Any]]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def with_repair(stage: str, request: Mapping[str, Any], base_seed: int,
+                fn: Callable[[int], repair.Outcome], out_dir: Path = RUNS, keep_server: bool = False
+                ) -> Tuple[int, str, Dict[str, Any]]:
+    """Run a stage through the repair loop; write <out_dir>/../repairs/<repair_id>.json.
+
+    The server stays up between attempts (a cold start is ~15 s) and is
+    stopped at the end unless it was already running or --keep-server.
+    """
+    rules = gen_rules.load()
+    pol = repair.policy(rules.repair)
+    was_up = comfy.Client(rules.comfyui.port).stats() is not None
+    try:
+        last, attempts = repair.run(stage, base_seed, pol, fn)
+    finally:
+        if not was_up and not keep_server:
+            comfy.stop()
+    rec = repair.record(stage, request, pol, last, attempts)
+    path = out_dir.parent / "repairs" / (rec["repair_id"] + ".json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(rec, indent=2, sort_keys=False, ensure_ascii=False) + "\n")
+    what = {repair.ACCEPT: "PASS", repair.STOP: "HANDED OVER" if rec["exit_code"] == 1 else "ERROR"}
+    message = "%s after %d attempt(s): %s. See %s" % (what[last.decision], len(attempts), last.reason,
+                                                     report_path(path))
+    if last.decision == repair.ACCEPT:
+        message += " -> %s" % last.run
+    return rec["exit_code"], message, rec
+
+
+def concept_repaired(subject: str, asset_class: str, style: str, seed: int = 0, out_dir: Path = RUNS,
+                     keep_server: bool = False, env: Mapping[str, str] = os.environ
+                     ) -> Tuple[int, str, Dict[str, Any]]:
+    """`gen concept --repair`: retry by seed per conventions/generation.yaml `repair`."""
+    request = {"subject": subject, "asset_class": asset_class, "style": style, "base_seed": seed}
+    return with_repair(CONCEPT_STAGE, request, seed, lambda s: _outcome(
+        lambda: concept(subject, asset_class, style, s, out_dir, True, env), "concept.report.json"),
+        out_dir, keep_server)
+
+
+def model_repaired(source: str, asset_class: str, seed: int = 56, out_dir: Path = RUNS,
+                   keep_server: bool = False, env: Mapping[str, str] = os.environ
+                   ) -> Tuple[int, str, Dict[str, Any]]:
+    """`gen model --repair`. The request names the image by content, not by path."""
+    src = Path(source)
+    image = src / "image.png" if src.is_dir() else src
+    request = {"image_sha256": sha256_file(image) if image.is_file() else None,
+               "asset_class": asset_class, "base_seed": seed}
+    return with_repair(MODEL_STAGE, request, seed, lambda s: _outcome(
+        lambda: model(source, asset_class, s, out_dir, True, env), "model.report.json"),
+        out_dir, keep_server)
 
 
 def server(action: str, env: Mapping[str, str] = os.environ) -> Tuple[int, str]:
@@ -371,12 +462,14 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     k.add_argument("--class", dest="asset_class", required=True)
     k.add_argument("--style", required=True, help="style id from conventions/gen_styles.yaml")
     k.add_argument("--seed", type=int, default=0)
+    k.add_argument("--repair", action="store_true", help="retry failed checks by seed (generation.yaml repair)")
     k.add_argument("--out", default=str(RUNS))
     k.add_argument("--keep-server", action="store_true")
     m = sub.add_parser("model", help="image to textured low-poly GLB at the class budgets + model checks")
     m.add_argument("source", help="a concept run folder (out/gen/runs/concept_zimage-...) or an image")
     m.add_argument("--class", dest="asset_class", required=True)
     m.add_argument("--seed", type=int, default=56)
+    m.add_argument("--repair", action="store_true", help="retry failed checks by seed (generation.yaml repair)")
     m.add_argument("--out", default=str(RUNS))
     m.add_argument("--keep-server", action="store_true")
     i = sub.add_parser("ingest", help="a passing model run -> Maya scene + textures (mayapy)")
@@ -397,14 +490,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             pairs = ["%s=%s" % (name, value) for name, value in args.param]
             code, message = run(args.workflow, pairs, Path(os.path.abspath(args.out)), args.keep_server)
         elif args.command == "model":
-            code, message, _ = model(args.source, args.asset_class, args.seed,
-                                     Path(os.path.abspath(args.out)), args.keep_server)
+            fn = model_repaired if args.repair else model
+            code, message, _ = fn(args.source, args.asset_class, args.seed,
+                                  Path(os.path.abspath(args.out)), args.keep_server)
         elif args.command == "ingest":
             code, message, _ = ingest(args.model_run, args.asset_class, args.name, args.size_cm,
                                       Path(os.path.abspath(args.out)))
         elif args.command == "concept":
-            code, message, _ = concept(args.subject, args.asset_class, args.style, args.seed,
-                                       Path(os.path.abspath(args.out)), args.keep_server)
+            fn = concept_repaired if args.repair else concept
+            code, message, _ = fn(args.subject, args.asset_class, args.style, args.seed,
+                                  Path(os.path.abspath(args.out)), args.keep_server)
         else:
             code, message = server(args.action)
     except (ToolError, gen_rules.ConventionError, KeyError, GlbError) as exc:
