@@ -67,6 +67,22 @@
       "severity": "error"
     },
     {
+      "fixable": true,
+      "id": "topology.inverted",
+      "message": "no inverted meshes",
+      "metrics": {
+        "inward": 0,
+        "meshes": {},
+        "meshes_checked": 1,
+        "not_verifiable": 0,
+        "opposite_flag": 0
+      },
+      "offender_count": 0,
+      "offenders": [],
+      "passed": true,
+      "severity": "error"
+    },
+    {
       "fixable": false,
       "id": "topology.ngons",
       "message": "no ngons",
@@ -305,8 +321,8 @@
     "errors": 0,
     "fixable": 0,
     "fixes_applied": 0,
-    "passed": 17,
-    "total": 17,
+    "passed": 18,
+    "total": 18,
     "warnings": 0
   },
   "tool": "artpipe.validate.maya",

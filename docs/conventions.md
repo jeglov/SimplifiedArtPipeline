@@ -145,6 +145,13 @@ An agent can parse `SM_Crate_A_LOD2` without guessing.
   mesh **and parent group**. Each Maya transform becomes a Unity GameObject.
   Unfrozen values end up inside the prefab, and negative scale renders inside
   out.
+- **No inverted meshes.** Freezing a negative scale doesn't make it safe:
+  Maya mirrors the points, keeps the winding, and sets the shape's hidden
+  `opposite` flag so the viewport still looks right. FBX drops that flag
+  (probed: the file is identical with or without it), so Unity gets
+  inward-facing triangles. `topology.inverted` flags the `opposite` flag on
+  any mesh, and inward winding on closed meshes (negative signed volume).
+  On an open mesh the winding can't be measured, because there is no inside.
 - **Pivot = the world origin.** Unity doesn't import Maya pivots: an
   object's pivot in Unity *is* its origin. So the class's pivot mode says
   where the **geometry** sits around (0, 0, 0):
@@ -193,19 +200,20 @@ above. Textures are validated and imported by the Unity package (see
 | 2 | `topology.non_manifold` | No edges shared by more than two faces and no bowtie vertices. | error | — |
 | 3 | `topology.lamina_faces` | No duplicate faces that share all of their edges with another face. | error | yes |
 | 4 | `topology.open_borders` | The mesh is watertight: no border edges (holes). | error | — |
-| 5 | `topology.ngons` | No polygons with more than 4 sides. | error | — |
-| 6 | `budget.tris` | LOD0 triangle count is within the asset class budget. | error | — |
-| 7 | `budget.lods` | LOD count is allowed for the class, levels are contiguous and each LOD is light enough. | error | — |
-| 8 | `budget.materials` | Every mesh has at least one and at most max_materials materials. | error | — |
-| 9 | `uv.present` | Required UV sets exist, come first in the set order, and map every face. | error | yes |
-| 10 | `uv.unit_square` | All UV0 coordinates are inside the 0-1 square (unless the class allows tiling). | error | — |
-| 11 | `uv.overlap` | UV0 faces don't overlap (reported as info where the class allows overlap). | info (error where the class sets overlap_allowed: false) | — |
-| 12 | `scene.units` | The scene's linear unit matches the conventions (cm). Not verifiable for FBX yet. | warning | yes |
-| 13 | `transform.frozen` | Meshes and their parent groups have frozen transforms (t=0, r=0, s=1, no shear). | error | yes |
-| 14 | `transform.pivot` | Pivots are at the world origin and the geometry is placed per the class pivot mode. | error | yes |
-| 15 | `transform.size` | The largest dimension (cm) is within the asset class size range. | error | — |
-| 16 | `naming.convention` | Names follow naming.schema.json; one root named like the file; consistent LOD suffixes. | error | yes |
-| 17 | `scene.history` | Meshes have no construction (modelling) history; deformers are allowed. | error | yes |
+| 5 | `topology.inverted` | Faces point outward in the exported file (closed meshes) and no shape has the `opposite` flag. | error | yes |
+| 6 | `topology.ngons` | No polygons with more than 4 sides. | error | — |
+| 7 | `budget.tris` | LOD0 triangle count is within the asset class budget. | error | — |
+| 8 | `budget.lods` | LOD count is allowed for the class, levels are contiguous and each LOD is light enough. | error | — |
+| 9 | `budget.materials` | Every mesh has at least one and at most max_materials materials. | error | — |
+| 10 | `uv.present` | Required UV sets exist, come first in the set order, and map every face. | error | yes |
+| 11 | `uv.unit_square` | All UV0 coordinates are inside the 0-1 square (unless the class allows tiling). | error | — |
+| 12 | `uv.overlap` | UV0 faces don't overlap (reported as info where the class allows overlap). | info (error where the class sets overlap_allowed: false) | — |
+| 13 | `scene.units` | The scene's linear unit matches the conventions (cm). Not verifiable for FBX yet. | warning | yes |
+| 14 | `transform.frozen` | Meshes and their parent groups have frozen transforms (t=0, r=0, s=1, no shear). | error | yes |
+| 15 | `transform.pivot` | Pivots are at the world origin and the geometry is placed per the class pivot mode. | error | yes |
+| 16 | `transform.size` | The largest dimension (cm) is within the asset class size range. | error | — |
+| 17 | `naming.convention` | Names follow naming.schema.json; one root named like the file; consistent LOD suffixes. | error | yes |
+| 18 | `scene.history` | Meshes have no construction (modelling) history; deformers are allowed. | error | yes |
 <!-- /generated:checks -->
 
 **Severity:**
@@ -233,20 +241,28 @@ skipped, with its reason.
 |---|---|---|
 | 1 | `topology.lamina_faces` | Delete the duplicate (stacked) faces reported by the check. |
 | 2 | `scene.history` | Bake construction history into the mesh (deformers are kept). |
-| 3 | `uv.present` | Rename a lone UV set to the required name, or move the required set first. |
-| 4 | `scene.units` | Set the scene's linear unit to the conventions unit (geometry is unchanged). |
-| 5 | `transform.frozen` | Freeze transforms on the asset hierarchy and reset pivots to the origin. |
-| 6 | `transform.pivot` | Reset pivots to the origin and move the geometry so its class anchor sits there. |
-| 7 | `naming.convention` | Rename default/invalid mesh, root group and material names after the file. |
+| 3 | `topology.inverted` | Reverse inward-facing meshes and clear the `opposite` flag, keeping what Maya shows on open meshes. |
+| 4 | `uv.present` | Rename a lone UV set to the required name, or move the required set first. |
+| 5 | `scene.units` | Set the scene's linear unit to the conventions unit (geometry is unchanged). |
+| 6 | `transform.frozen` | Freeze transforms on the asset hierarchy and reset pivots to the origin. |
+| 7 | `transform.pivot` | Reset pivots to the origin and move the geometry so its class anchor sits there. |
+| 8 | `naming.convention` | Rename default/invalid mesh, root group and material names after the file. |
 <!-- /generated:fixes -->
 
 **A fix refuses to run, and says why, when it can't be sure:**
 - the freeze fix refuses negative scale: freezing it flips the normals in a
   way FBX doesn't carry, so the mesh imports inside out
-- the freeze, pivot and lamina fixes refuse skinned meshes
+- the freeze, pivot, lamina and inverted fixes refuse skinned meshes
 - the UV fix refuses faces with no UVs: those need an unwrap
 - the naming fix refuses a valid name that just disagrees with the file:
   `SM_Crate` inside `SM_FileMismatch.ma` could be either mistake
+
+**The inverted fix keeps what Maya shows on open meshes.** A closed mesh is
+reversed only if it faces inward. An open mesh with the `opposite` flag is
+reversed and the flag cleared, so the viewport stays the same and the FBX
+now matches it. It reverses locked normals too (`polyNormal
+userNormalMode=1`). Probed: with the default, locked normals, which every
+FBX input has, stay where they were while the faces flip.
 
 **Never auto-fixed:** holes, non-manifold geometry, n-gons, over-budget
 triangles, LODs or materials, wrong size, UVs outside 0–1. Each of these

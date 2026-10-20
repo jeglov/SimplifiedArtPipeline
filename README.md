@@ -22,7 +22,7 @@ to fix, and import it into Unity.
 set name, live history, an unfrozen and off-centre transform, a metre scene.
 In about 20 seconds:
 
-1. **Maya** (headless `mayapy`) runs 17 checks against the rules for its
+1. **Maya** (headless `mayapy`) runs 18 checks against the rules for its
    class, applies the 6 safe fixes, saves a fixed copy, and validates it again
    from scratch. Holes, n-gons and over-budget meshes are never "fixed":
    the build stops and the report says where they are.

@@ -16,7 +16,7 @@
 Deferred issues are tracked in [docs/backlog.md](docs/backlog.md), tagged by stage (P1.3 … P5). Add new deferred issues there. Don't silently drop them.
 
 ## What exists (Phases 1 and 2)
-- Phase 1: conventions, headless Maya validator (17 checks, 7 safe fixes), deterministic reports. See docs/conventions.md.
+- Phase 1: conventions, headless Maya validator (18 checks, 8 safe fixes), deterministic reports. See docs/conventions.md.
 - Phase 2: canonical FBX export, Unity 6 URP project with the `com.artpipe.importer` package (import gate, per-class ModelImporter/TextureImporter rules, GPU vertex budgets, Prefab Variants), batchmode `artpipe unity import|verify`, and `artpipe build` (Maya scene to Unity prefab). See docs/unity_import.md and README.md.
 - Report contracts: `conventions/*.schema.json`. Rules reach C# only through `conventions.lock.json` (`artpipe conventions --dump`).
 - Tests: `artpipe test` (~450, ~4 min, close the Unity Editor first); fast run `-m "not maya and not unity"`.

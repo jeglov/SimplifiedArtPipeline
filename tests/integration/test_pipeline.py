@@ -82,6 +82,7 @@ def test_blocked_fixes_explain_why(scenes, validate, tmp_path):
         "SK_SkinnedLamina": ("topology.lamina_faces", "skinned"),
         "SM_FileMismatch": ("naming.convention", "unclear which one is right"),
         "SM_NoUVs": ("uv.present", "needs an unwrap"),
+        "SK_SkinnedOpposite": ("topology.inverted", "skinned"),
     }
     for name, (fix_id, words) in reasons.items():
         report = validate(scenes[name], EXPECT[name][0], fix_dir=tmp_path)
@@ -90,6 +91,42 @@ def test_blocked_fixes_explain_why(scenes, validate, tmp_path):
         assert words in skipped[fix_id].message, (name, skipped[fix_id].message)
         failing = {r.id: r for r in validate(scenes[name], EXPECT[name][0]).results if not r.passed}
         assert failing[fix_id].fixable is False, "%s: blocked fix must report fixable=false" % name
+
+
+def _face_state(path, mesh):
+    """(opposite flag, face 0 normal from its winding, normals agree with winding on every face-vertex)."""
+    import maya.api.OpenMaya as om
+    from maya import cmds
+    from validate.maya import session
+
+    session.open_scene(path)
+    sel = om.MSelectionList()
+    sel.add(mesh)
+    fn = om.MFnMesh(sel.getDagPath(0))
+    agree = all(fn.getFaceVertexNormal(f, v, om.MSpace.kObject) * fn.getPolygonNormal(f, om.MSpace.kObject) > 0
+                for f in range(fn.numPolygons) for v in fn.getPolygonVertices(f))
+    shape = cmds.listRelatives(mesh, shapes=True, fullPath=True)[0]
+    normal = fn.getPolygonNormal(0, om.MSpace.kObject)
+    return cmds.getAttr(shape + ".opposite"), [round(x, 6) for x in normal], agree
+
+
+@pytest.mark.parametrize("name", ["SM_Opposite", "SM_FrozenMirror", "SM_Reversed", "SM_OpenOpposite"])
+def test_inverted_fix_flips_normals_with_the_faces(name, scenes, validate, tmp_path):
+    # Locked normals (SM_Reversed) must turn with the faces, or Unity gets
+    # inward triangles lit as if they faced out.
+    validate(scenes[name], EXPECT[name][0], fix_dir=tmp_path)
+    opposite, _, agree = _face_state(tmp_path / ("%s.ma" % name), "|" + name)
+    assert opposite is False and agree
+
+
+def test_inverted_fix_keeps_what_maya_shows_on_an_open_mesh(scenes, validate, tmp_path):
+    # The plane is stored facing +Y; the flag makes Maya show it facing -Y.
+    # The artist approved -Y, so that's what the FBX must now store.
+    opposite, before, _ = _face_state(scenes["SM_OpenOpposite"], "|SM_OpenOpposite")
+    assert opposite is True and before == [0.0, 1.0, 0.0]
+    validate(scenes["SM_OpenOpposite"], "env_module", fix_dir=tmp_path)
+    _, after, _ = _face_state(tmp_path / "SM_OpenOpposite.ma", "|SM_OpenOpposite")
+    assert after == [0.0, -1.0, 0.0]
 
 
 # --- contracts -------------------------------------------------------------------

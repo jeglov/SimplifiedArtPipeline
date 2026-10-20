@@ -36,6 +36,13 @@ EXPECT = {
     # Stacked faces share every edge (no border) and also stack in UV space (info).
     "SM_Lamina": ("prop_small", ["topology.lamina_faces", "uv.overlap"]),
     "SM_OpenBorder": ("prop_small", ["topology.open_borders"]),
+    "SM_Opposite": ("prop_small", ["topology.inverted"]),        # `opposite` set by hand: FBX drops it
+    "SM_FrozenMirror": ("prop_small", ["topology.inverted"]),    # scale -1 frozen: Maya sets `opposite`
+    "SM_Reversed": ("prop_small", ["topology.inverted"]),        # Normals > Reverse, with locked normals
+    # Open mesh: no inside to measure, only the flag is checked. The fix keeps what Maya shows.
+    "SM_OpenOpposite": ("env_module", ["topology.inverted", "topology.open_borders"]),
+    "SM_OpenReversed": ("prop_small", ["topology.open_borders"]),  # boundary: open + reversed is invisible
+    "SK_SkinnedOpposite": ("character", ["topology.inverted"]),  # fix blocked: the mesh is skinned
     "SM_Ngon": ("prop_small", ["topology.ngons"]),
     "SM_Pentagon": ("prop_small", ["topology.ngons"]),           # boundary: 5 sides is the smallest ngon
     "SM_OverBudget": ("prop_small", ["budget.tris"]),            # 760 tris > 500
@@ -88,6 +95,10 @@ FIX_EXPECT = {
     "SM_WithHistory": [],
     "SK_SkinnedHistory": [],
     "SM_Lamina": ["topology.open_borders"],  # removing the duplicate reveals a single open quad
+    "SM_Opposite": [],
+    "SM_FrozenMirror": [],
+    "SM_Reversed": [],
+    "SM_OpenOpposite": ["topology.open_borders"],
     "SM_NotFrozen": [],
     "SM_GroupNotFrozen": [],
     "SM_GeoOffset": [],
@@ -106,7 +117,7 @@ FIX_EXPECT = {
 SELF_PLACED = {"SM_NotFrozen", "SM_GroupNotFrozen", "SM_GeoOffset", "SM_PivotMoved",
                "SM_PickupCentered", "SM_PickupOnGround", "SM_TooSmall", "SM_TooBig", "SM_Meters",
                "SM_WithHistory", "SK_Skinned", "SK_SkinnedHistory", "SK_SkinnedLamina",
-               "SM_NegativeScale", "SM_Messy", "SM_Empty"}
+               "SM_NegativeScale", "SM_Messy", "SM_Empty", "SM_FrozenMirror", "SK_SkinnedOpposite"}
 
 
 def _merge(name, parts):
@@ -182,6 +193,57 @@ def build_open_border():
     mesh = _merge("SM_OpenBorder", [_cube()])
     cmds.delete(mesh + ".f[3]")  # bottom face -> 4 border edges
     cmds.delete(mesh, constructionHistory=True)
+
+
+def _set_opposite(mesh):
+    from maya import cmds
+    cmds.setAttr(cmds.listRelatives(mesh, shapes=True, fullPath=True)[0] + ".opposite", True)
+
+
+def _reverse(mesh):
+    from maya import cmds
+    cmds.polyNormal(mesh, normalMode=0, userNormalMode=1, ch=False)
+
+
+def _plane(name):
+    from maya import cmds
+    return _merge(name, [cmds.polyPlane(sx=1, sy=1, ch=False)[0]])
+
+
+def build_opposite():
+    _set_opposite(_merge("SM_Opposite", [_cube()]))
+
+
+def build_frozen_mirror():
+    from maya import cmds
+    mesh = _merge("SM_FrozenMirror", [_cube()])
+    _conform()
+    cmds.scale(-1, 1, 1, mesh)  # symmetric cube: bbox unchanged
+    cmds.makeIdentity(mesh, apply=True, scale=True, normal=0)  # Maya sets `opposite` here
+    cmds.xform(mesh, pivots=(0, 0, 0), worldSpace=True)
+
+
+def build_reversed():
+    from maya import cmds
+    mesh = _merge("SM_Reversed", [_cube()])
+    cmds.polyNormalPerVertex(mesh + ".vtx[*]", freezeNormal=True)  # locked, like any FBX input
+    cmds.delete(mesh, constructionHistory=True)
+    _reverse(mesh)
+
+
+def build_open_opposite():
+    _set_opposite(_plane("SM_OpenOpposite"))
+
+
+def build_open_reversed():
+    _reverse(_plane("SM_OpenReversed"))
+
+
+def build_skinned_opposite():
+    mesh = _merge("SK_SkinnedOpposite", [_cube()])
+    _conform()
+    _set_opposite(mesh)
+    _skin(mesh)
 
 
 def build_ngon():
@@ -497,6 +559,12 @@ BUILDERS = {
     "SM_NonManifoldVertex": build_nonmanifold_vertex,
     "SM_Lamina": build_lamina,
     "SM_OpenBorder": build_open_border,
+    "SM_Opposite": build_opposite,
+    "SM_FrozenMirror": build_frozen_mirror,
+    "SM_Reversed": build_reversed,
+    "SM_OpenOpposite": build_open_opposite,
+    "SM_OpenReversed": build_open_reversed,
+    "SK_SkinnedOpposite": build_skinned_opposite,
     "SM_Ngon": build_ngon,
     "SM_Pentagon": build_pentagon,
     "SM_OverBudget": build_over_budget,
