@@ -4,7 +4,7 @@
     artpipe banners status                   JSON: every pinned tool, installed or not
     artpipe banners kit KIT --template T [--locale L ...] [--placement P ...]
                                              kit.* checks -> out/banners/kits/<kit>.<template>.kit.report.json
-    artpipe banners render KIT --template T [--placement P] [--locale L]
+    artpipe banners render KIT --template T [--placement P] [--locale L] [--repair]
                                              one banner -> out/banners/<kit>/<template>/<placement>/<locale>/
                                              + banner.* checks -> banner.report.json in that folder
     artpipe banners check FOLDER             re-run the banner checks on a rendered banner
@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Sequence, Tuple
 
-from banners import art, build, check as banner_check, tools
+from banners import art, build, check as banner_check, repair as banner_repair, tools
 from banners.core import ToolError
 from banners.core import checks as banner_checks
 from banners.core import kit as kit_mod
@@ -91,6 +91,7 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     rd.add_argument("--template", required=True)
     rd.add_argument("--placement", default="ua_video_9x16")
     rd.add_argument("--locale", default="en")
+    rd.add_argument("--repair", action="store_true", help="fix and re-render failed banners (banners.yaml repair)")
     rd.add_argument("--out", default=str(OUT))
     ck = sub.add_parser("check", help="re-run the banner checks on a rendered banner folder")
     ck.add_argument("folder", help="out/banners/<kit>/<template>/<placement>/<locale>")
@@ -135,6 +136,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if report.exit_code != EXIT_OK:
                 print("artpipe banners: the kit fails its checks, not rendering: %s" % report_path(kit_report), file=sys.stderr)
                 return report.exit_code
+            if args.repair:
+                code, rec, folder = banner_repair.run(rules, ctx.template, ctx.kit, ctx.fonts, args.placement,
+                                                      args.locale, Path(os.path.abspath(args.out)))
+                print("artpipe banners: %s after %d render(s): %s. See %s" % (
+                    {"accept": "PASS", "stop": "HANDED OVER" if code == 1 else "ERROR"}[rec["decision"]],
+                    rec["summary"]["renders"], rec["reason"], report_path(folder / banner_repair.RECORD)),
+                    file=sys.stdout if code == EXIT_OK else sys.stderr)
+                return code
             r = build.render_banner(rules, ctx.template, ctx.kit, ctx.fonts, args.placement, args.locale,
                                     Path(os.path.abspath(args.out)))
             return _verdict(*banner_check.check(rules, r.folder, ctx.template), sheet=r.folder / "sheet.png")

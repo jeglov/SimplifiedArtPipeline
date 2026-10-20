@@ -16,7 +16,9 @@ DOM per layer:  div.layer#<id> (box, transform, opacity)
                   image:        img
                   text/button:  div.area (button: inset by half the height) > span.t
 Text never breaks inside a word (overflow-wrap: normal), so a word too long
-for its box overflows visibly and measurably instead of being split.
+for its box overflows visibly and measurably instead of being split. Lines
+are balanced (text-wrap: balance): "Merge mushrooms, grow / a magic grove!"
+becomes two even lines, as a typesetter would break an ad headline.
 
 Pure Python 3.9.
 """
@@ -188,7 +190,7 @@ html,body{margin:0;width:%(w)dpx;height:%(h)dpx;overflow:hidden;background:#000;
 .layer{position:absolute;transform-origin:50%% 50%%;will-change:auto;}
 .layer img{position:absolute;display:block;}
 .area{position:absolute;top:0;bottom:0;display:flex;align-items:center;}
-.t{display:block;overflow-wrap:normal;word-break:normal;hyphens:manual;white-space:normal;}
+.t{display:block;overflow-wrap:normal;word-break:normal;hyphens:manual;white-space:normal;text-wrap:balance;}
 </style></head>
 <body>
 %(layers)s

@@ -99,6 +99,21 @@ class CheckRules:
     logo_aspect_tolerance: float
 
 
+REPAIR_ACTIONS = ("shrink_text", "with_text_fit", "recolour_text", "recolour_cta", "stop")
+
+
+@dataclass(frozen=True)
+class RepairRules:
+    max_renders: int
+    max_measure_passes: int
+    fit_margin: float
+    default: str
+    actions: Dict[str, str]
+
+    def action_for(self, check_id: str) -> str:
+        return self.actions.get(check_id, self.default)
+
+
 @dataclass(frozen=True)
 class BannerRules:
     ffmpeg: ToolPin
@@ -107,6 +122,7 @@ class BannerRules:
     encode: EncodeRules
     licences: LicenceRules
     checks: CheckRules
+    repair: RepairRules
     placements: Dict[str, Placement]
 
     def placement(self, pid: str) -> Placement:
@@ -238,6 +254,23 @@ def _checks(r: _Reader) -> CheckRules:
     return c
 
 
+def _repair(r: _Reader) -> RepairRules:
+    fit = r.get("fit_margin", float)
+    if not 0.5 <= fit <= 1.0:
+        raise ConventionError("%s.fit_margin: must be in [0.5, 1], got %s" % (r.where, fit))
+    default = _choice(r, "default", REPAIR_ACTIONS)
+    actions = {}
+    for cid, action in sorted(r.get("actions", dict).items()):
+        if not re.match(r"^banner\.[a-z][a-z0-9_]*$", str(cid)):
+            raise ConventionError("%s.actions.%s: expected a banner.* check id" % (r.where, cid))
+        if action not in REPAIR_ACTIONS:
+            raise ConventionError("%s.actions.%s: expected one of %s" % (r.where, cid, list(REPAIR_ACTIONS)))
+        actions[cid] = action
+    rep = RepairRules(_positive(r, "max_renders"), _positive(r, "max_measure_passes"), fit, default, actions)
+    r.done()
+    return rep
+
+
 def _nonneg(r: _Reader, key: str) -> float:
     val = r.get(key, float)
     if val < 0:
@@ -256,6 +289,7 @@ def parse(data: dict) -> BannerRules:
     encode = _encode(root.sub("encode"))
     licences = _licences(root.sub("licences"))
     checks = _checks(root.sub("checks"))
+    repair = _repair(root.sub("repair"))
     placements = {}
     for pid, raw in sorted(root.get("placements", dict).items()):
         if not _ID.match(str(pid)):
@@ -267,7 +301,7 @@ def parse(data: dict) -> BannerRules:
     if not placements:
         raise ConventionError("%s: define at least one placement" % FILE)
     root.done()
-    return BannerRules(ffmpeg, chromium, playwright, encode, licences, checks, placements)
+    return BannerRules(ffmpeg, chromium, playwright, encode, licences, checks, repair, placements)
 
 
 def load(conventions_dir: Optional[Path] = None) -> BannerRules:

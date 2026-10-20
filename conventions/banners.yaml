@@ -115,6 +115,35 @@ checks:
   # banner.logo: drawn aspect vs. the file's, as a share (1 %).
   logo_aspect_tolerance: 0.01
 
+# The repair step (banners/repair.py, banners/core/repair.py): what a failed
+# banner does next. Every blocking failure is looked up in `actions`; if any
+# maps to `stop` (or isn't listed: `default`), the banner is handed over at
+# once (no render is spent on a banner a human must see anyway). Otherwise
+# the fixes are planned without re-rendering where possible, and the banner
+# is rendered once more and checked again, at most `max_renders` in total.
+#   shrink_text    scale the failing layer's font down until the layout engine
+#                  says it fits (one-frame measure passes, ~3 s each), never
+#                  under checks.min_text_share: then a human shortens the string
+#   recolour_text  the palette colour with the best contrast against the
+#                  pixels already measured behind the text
+#   recolour_cta   a palette fill that reads on the scene AND under the label
+#                  (or a palette label colour for the current fill)
+#   with_text_fit  no fix of its own: the failure is a consequence of text
+#                  overflow if every layer it names also fails banner.text_fit
+#                  (seen on the first real banner: 3 centred lines reach 45 px
+#                  out of the safe zone). Otherwise it is a `stop`.
+# Colours come from the kit's palette only: a repair never invents a colour.
+repair:
+  max_renders: 3          # the first render included: ~2 min each
+  max_measure_passes: 6
+  fit_margin: 0.97        # shrink a little past "just fits": line breaks jump
+  default: stop
+  actions:
+    banner.text_fit: shrink_text
+    banner.safe_zone: with_text_fit
+    banner.contrast: recolour_text
+    banner.cta_contrast: recolour_cta
+
 # Placements: one per output format. Sources read 2026-10-20:
 #   meta    https://www.facebook.com/business/ads-guide/update/video/instagram-reels
 #   tiktok  https://ads.tiktok.com/help/article/tiktok-auction-in-feed-ads

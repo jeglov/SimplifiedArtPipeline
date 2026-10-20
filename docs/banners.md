@@ -273,3 +273,50 @@ the grey where cream text reaches exactly 3:1, a 2.0 s end card).
 duration and end card fail, as they must. Three planted bugs (contrast bar
 0.05 lower, safe zone judging fading frames, an inclusive bitrate floor)
 each turned the suite red.
+
+## Repair (step 4.6)
+
+`artpipe banners render KIT --template T --repair` renders, checks, and
+when blocking checks fail, plans fixes from the policy
+(`conventions/banners.yaml` `repair`, `banners/core/repair.py`), renders
+again and checks again: at most `max_renders` (3) full renders.
+`repair.json` next to the banner records every attempt
+(`conventions/banner_repair.schema.json`): what failed, what changed and why,
+the MP4 hash of each render.
+
+| Action | For | How |
+|---|---|---|
+| `shrink_text` | `banner.text_fit` | one-frame measure passes (~3 s, no encode) until the layout engine says it fits; the first guess is sqrt(area height / text height), since a wrapped text's height falls with about the square of the scale; never under `checks.min_text_share`: at the floor, hand over ("shorten the string") |
+| `with_text_fit` | `banner.safe_zone` | no fix of its own: accepted only if every layer it names also fails text fit (overflowing lines, centred, poke out of the zone); otherwise `stop` |
+| `recolour_text` | `banner.contrast` | the palette colour with the best low-percentile contrast against the pixels already sampled behind every layer sharing the colour slot; the shadow slot follows (the palette colour farthest from the new text colour) |
+| `recolour_cta` | `banner.cta_contrast` | the smallest palette change that makes both ratios pass: a new fill, else a new label, else both |
+| `stop` (default) | everything else | hand over before spending a render |
+
+Rules: a repair never invents a colour (palette names only) and never
+shrinks text below the readable size. If any blocking failure has no fix,
+the banner is handed over at once. Ties break on names, so a repair is
+the same on every machine.
+
+On the real banner: render 1 fails text fit and safe zone; two measure
+passes find headline x0.792 (85 px); render 2 passes all 17. Probed on the
+way:
+
+* **The first policy handed the real banner over** because `banner.safe_zone`
+  had no fix, though it was only a consequence of the overflow: hence
+  `with_text_fit`, restricted to the same layers (a CTA outside the zone
+  still stops).
+* **`best_cta` changing only the fill or only the label found nothing** on a
+  cream background: a dark fill needs a light label. It now searches
+  (fill, label) pairs, smallest change first. The repaired banner: forest
+  text, a night pill with a cream label, all brand colours.
+* **Balanced lines** (`text-wrap: balance`): after the shrink the headline
+  broke as "Merge mushrooms, grow / a magic grove!"; balanced, it reads
+  "Merge mushrooms, / grow a magic grove!". Copywriter break hints: backlog #63.
+
+Tests (`tests/test_banner_repair.py`): the plan (accept on warnings only,
+stop when any failure has no fix, `with_text_fit` only for the same layers,
+tool errors), `fit_scale` (exact fit -> 1.0), the palette pickers (darkest
+on bright, None when nothing reads, label-only / both / fill-only), policy
+mistakes at load, and the loop on the real renderer: a long headline shrunk
+until it fits, cream text on a cream background recoloured (text and CTA),
+an unbreakable 47-letter CTA word handed over after one render.

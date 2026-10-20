@@ -47,6 +47,8 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 60 | P5 | Chrome for Testing publishes no hashes: the Chromium archive pin is the first download's sha256 (trust on first use) | A compromised first download would be pinned as "good" | Cross-check the archive on a second network or machine, or build from a hash Google publishes (none today); the exe hash is checked on every run either way |
 | 61 | P5 | Banner frames and MP4s are byte-identical across runs on this machine; across machines (another CPU, Windows build, GPU driver) it is not measured | Chromium's software raster and x264 are deterministic in principle, but a different CPU feature set (AVX-512 code paths in Skia or x264) can change bytes | Render the golden banners on a second machine and compare; if they differ, compare decoded frames with a tolerance (the checks already do) and key the golden tests on decoded frames only |
 | 62 | P5 | Glyph coverage (a kit's strings vs. its fonts) is only known at render time, from Chromium's font record | A Russian kit with Fredoka renders 240 frames before the fallback is found; an agent would rather know at `artpipe banners kit` | A `kit.glyphs` check reading each font's `cmap` table (TrueType format 4/12, pure Python) against every string, per locale |
+| 63 | P5 | Line breaks are the browser's (balanced with `text-wrap: balance`), never the copywriter's | A headline should break at the comma ("Merge mushrooms, / grow a magic grove!"), and German compound words need hyphenation points; balance only evens the lengths | A soft break / hyphenation hint in the kit strings (e.g. `
+` or U+00AD soft hyphen), and `lang` hyphenation dictionaries per locale, checked by `banner.text_fit` like any other text |
 
 ## Done
 
