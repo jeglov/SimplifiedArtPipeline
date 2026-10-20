@@ -142,6 +142,92 @@ def gen_concept(subject: str, asset_class: str, style: str, seed: int = 0, repai
     return _start("gen_concept", args + (["--repair"] if repair else []), resource="gpu")
 
 
+# --- fine tools: one check, one fix (step 5.4) -------------------------------------------
+
+CALLS = ROOT / "out" / "agent" / "calls"
+
+
+def _call_dir(kind: str) -> Path:
+    import uuid
+    d = CALLS / ("%s-%s" % (kind, uuid.uuid4().hex[:10]))
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _rel(p: Path) -> str:
+    try:
+        return p.resolve().relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(p)
+
+
+def _maya(args) -> Dict[str, Any]:
+    from agent.core import maya_worker
+    reply = maya_worker.call("validate", args)
+    return {"exit_code": reply["exit_code"], "meaning": commands.EXIT_MEANING.get(reply["exit_code"]),
+            "seconds": reply["seconds"]}
+
+
+def _report(path: Path) -> Dict[str, Any]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+@server.tool(description="List the checks (and fixes) you can run. domain: maya (scene checks + safe fixes), "
+                         "kit (game kit checks), banner (rendered banner checks). Each entry: id, severity "
+                         "(error blocks, warning informs), fixable, description.")
+def list_checks(domain: str = "maya") -> Dict[str, Any]:
+    if domain == "maya":
+        from agent.core import maya_worker
+        reply = maya_worker.call("list_checks", [])
+        return json.loads(reply["stdout"].strip().splitlines()[-1])
+    if domain in ("kit", "banner"):
+        out = commands.run(["banners", "checks"], RULES.server.call_timeout_s)
+        return {"checks": json.loads(out.stdout)[domain]}
+    raise ValueError("domain must be maya, kit or banner")
+
+
+@server.tool(description="Run ONE Maya check on a scene (.ma/.mb/.fbx, repo-relative or absolute) for an asset "
+                         "class (conventions/mesh_budgets.yaml). Returns that check's result: passed, severity, "
+                         "message, metrics, offenders (component names). Warm Maya worker: well under a second.")
+def run_check(file: str, asset_class: str, check_id: str) -> Dict[str, Any]:
+    d = _call_dir("check")
+    out = _maya([file, "--class", asset_class, "--checks", check_id, "--out", str(d)])
+    rep = _report(d / (Path(file).name + ".report.json"))
+    out.update(result=(rep.get("results") or [None])[0], tool_error=rep.get("tool_error"),
+               report=_rel(d / (Path(file).name + ".report.json")))
+    return out
+
+
+@server.tool(description="Apply ONE safe fix to a scene and re-validate the fixed copy with every check. The "
+                         "source is never touched: the fixed scene is written as .ma under out/agent/calls/. "
+                         "Returns what the fix did (or why it was skipped), the fixed file and the new report's "
+                         "summary and failing checks.")
+def apply_fix(file: str, asset_class: str, fix_id: str) -> Dict[str, Any]:
+    d = _call_dir("fix")
+    out = _maya([file, "--class", asset_class, "--fix", "--fixes", fix_id, "--fixed-dir", str(d / "fixed"),
+                 "--out", str(d)])
+    rep = _report(d / (Path(file).name + ".report.json"))
+    fixed = d / "fixed" / (Path(file).stem + ".ma")
+    out.update(fixes=rep.get("fixes"), fixed_file=_rel(fixed) if fixed.is_file() else None,
+               status=rep.get("status"), summary=rep.get("summary"), tool_error=rep.get("tool_error"),
+               failing=[r["id"] for r in rep.get("results") or [] if not r["passed"]],
+               report=_rel(d / (Path(file).name + ".report.json")))
+    return out
+
+
+@server.tool(description="Re-run banner checks on a rendered banner folder (out/banners/<kit>/<template>/"
+                         "<placement>/<locale>), all of them or only check_ids (comma-separated). Returns the "
+                         "report's status and each result. Writes banner.report.json in that folder.")
+def banners_check(folder: str, check_ids: str = "") -> Dict[str, Any]:
+    args = ["banners", "check", folder] + (["--checks", check_ids] if check_ids else [])
+    out = commands.run(args, RULES.server.call_timeout_s)
+    rep = _report((ROOT / folder if not Path(folder).is_absolute() else Path(folder)) / "banner.report.json")
+    return dict(out.to_dict(), status=rep.get("status"), results=rep.get("results"))
+
+
 def main() -> None:
     server.run("stdio")
 

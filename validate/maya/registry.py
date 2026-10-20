@@ -139,7 +139,13 @@ def unknown_override_ids(conventions) -> List[str]:
                   if check_id not in known)
 
 
-def run_all(ctx) -> Tuple[List[CheckResult], List[str]]:
+def unknown_ids(ids, fixes: bool = False) -> List[str]:
+    """Ids not registered as checks (or, with fixes=True, as fixes): the CLI refuses them (exit 2)."""
+    known = _FIX_BY_ID if fixes else _CHECK_BY_ID
+    return sorted(i for i in ids if i not in known)
+
+
+def run_all(ctx, only=None) -> Tuple[List[CheckResult], List[str]]:
     """Run every check. Returns (results, tool_errors).
 
     A check that crashes is a bug in the TOOL, not in the asset. It's
@@ -148,6 +154,8 @@ def run_all(ctx) -> Tuple[List[CheckResult], List[str]]:
     """
     results, errors = [], []
     for check in CHECKS:
+        if only is not None and check.ID not in only:
+            continue
         try:
             result = check.run(ctx)
         except Exception as exc:  # noqa: BLE001 - any crash is reported, never hidden
@@ -168,7 +176,7 @@ def run_all(ctx) -> Tuple[List[CheckResult], List[str]]:
     return results, errors
 
 
-def apply_fixes(make_ctx: Callable[[], object]) -> Tuple[List[FixResult], List[str]]:
+def apply_fixes(make_ctx: Callable[[], object], only=None) -> Tuple[List[FixResult], List[str]]:
     """Apply every fix whose check fails, in FIXES order. Returns (fixes, tool_errors).
 
     make_ctx() must build a FRESH CheckContext from the current scene: each
@@ -179,6 +187,8 @@ def apply_fixes(make_ctx: Callable[[], object]) -> Tuple[List[FixResult], List[s
     """
     fixes, errors = [], []
     for fix in FIXES:
+        if only is not None and fix.ID not in only:
+            continue
         ctx = make_ctx()
         result = _CHECK_BY_ID[fix.ID].run(ctx)
         if result.passed:

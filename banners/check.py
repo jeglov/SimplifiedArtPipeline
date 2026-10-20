@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 from banners import render, tools
 from banners.core import ToolError
@@ -43,12 +43,18 @@ def context(rules: BannerRules, folder: Path, template: Optional[template_mod.Te
     return BannerContext(template, rules.placement(page["placement"]), rules, layout, facts, decoded, background)
 
 
-def check(rules: BannerRules, folder: Path, template: Optional[template_mod.Template] = None) -> Tuple[Report, Path]:
+def check(rules: BannerRules, folder: Path, template: Optional[template_mod.Template] = None,
+          only: Optional[Sequence[str]] = None) -> Tuple[Report, Path]:
+    """All banner checks, or only the ids in `only` (a PARTIAL report, for an agent asking one question)."""
     mp4 = folder / "banner.mp4"
     shown = report_path(mp4)
+    selected = [c for c in banner_checks.BANNER_CHECKS if only is None or c.ID in only]
+    unknown = sorted(set(only or ()) - {c.ID for c in banner_checks.BANNER_CHECKS})
+    if unknown:
+        raise ToolError("unknown banner check id(s) %s" % ", ".join(unknown))
     try:
         ctx = context(rules, folder, template)
-        results, errors = banner_checks.run_all(banner_checks.BANNER_CHECKS, ctx)
+        results, errors = banner_checks.run_all(selected, ctx)
         report = Report(shown, tools.sha256_file(mp4), ctx.placement.id, results=results,
                         tool_error="; ".join(errors) or None, tool=TOOL)
     except ToolError as exc:

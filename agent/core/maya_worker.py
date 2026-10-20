@@ -16,7 +16,6 @@ import time
 from typing import Any, Dict, Optional, Sequence
 
 from agent.core import ToolError
-from agent.core.commands import argv_for
 from validate.core.locks import pid_alive
 
 from validate.maya.worker import RECORD   # stdlib-only module: importing it doesn't start Maya
@@ -69,16 +68,7 @@ def start(idle_s: Optional[float] = None) -> Dict[str, Any]:
         return info
     from agent.core import jobs
     extra = ["--idle-s", str(idle_s)] if idle_s else []
-    spawn: Dict[str, Any] = {}
-    argv = argv_for(["py", "-m", "validate.maya.worker"] + extra)
-    if jobs.in_job_object():
-        jobs._spawn_via_wmi(argv)
-    else:
-        import os
-        import subprocess
-        flags = (subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS) if os.name == "nt" else 0
-        subprocess.Popen(argv, cwd=str(jobs.ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, creationflags=flags)
+    jobs.spawn_detached(["py", "-m", "validate.maya.worker"] + extra)
     deadline = time.time() + START_TIMEOUT_S
     while time.time() < deadline:
         info = alive()

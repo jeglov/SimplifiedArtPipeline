@@ -176,14 +176,13 @@ def in_job_object() -> bool:
     return bool(ok) and bool(result.value)
 
 
-def _spawn_via_wmi(argv: Sequence[str]) -> int:
+def _spawn_via_wmi(line: str) -> int:
     """Create the process through WMI (Win32_Process.Create): the WMI service starts it, outside any
-    Job Object of ours, with the user's own environment. Returns its pid."""
+    Job Object of ours, with the user's own environment. `line` is a full command line. Returns its pid."""
     import subprocess
 
     def ps_quote(s: str) -> str:
         return "'" + s.replace("'", "''") + "'"
-    line = " ".join('"%s"' % a if " " in a else a for a in argv)
     script = ("$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments "
               "@{CommandLine=%s; CurrentDirectory=%s}; if ($r.ReturnValue -ne 0) { exit 3 }; "
               "Write-Output $r.ProcessId" % (ps_quote(line), ps_quote(str(ROOT))))
@@ -205,19 +204,24 @@ def spawn_runner(record: Dict[str, Any]) -> int:
     created by WMI (Win32_Process.Create: the WMI service starts it, outside
     our job, ~1 s); outside a job a detached child is enough.
     """
+    return spawn_detached(["agent", "job-run", record["id"]], record)
+
+
+def spawn_detached(args: Sequence[str], info: Optional[Dict[str, Any]] = None) -> int:
+    """Start `artpipe ARGS` detached and outside any Job Object of ours (see spawn_runner). Returns its pid."""
     import subprocess
-    from agent.core.commands import argv_for
-    argv = argv_for(["agent", "job-run", record["id"]])
+    from agent.core.commands import argv_for, cmdline_for
+    info = info if info is not None else {}
     if os.name != "nt":
-        record["spawn"] = "detached"
-        return subprocess.Popen(argv, cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        info["spawn"] = "detached"
+        return subprocess.Popen(argv_for(args), cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL, start_new_session=True).pid
     if in_job_object():
-        record["spawn"] = "wmi"
-        return _spawn_via_wmi(argv)
-    record["spawn"] = "detached"
+        info["spawn"] = "wmi"
+        return _spawn_via_wmi(cmdline_for(args))
+    info["spawn"] = "detached"
     flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-    return subprocess.Popen(argv, cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+    return subprocess.Popen(cmdline_for(args), cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL, creationflags=flags).pid
 
 

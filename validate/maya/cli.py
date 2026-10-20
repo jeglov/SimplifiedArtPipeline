@@ -1,7 +1,8 @@
 """Command line entry point: validate one or more files, one JSON report each.
 
     mayapy -m validate.maya.cli FILE [FILE ...] --class prop_small [--out out] [--max-offenders N]
-                                [--fix [--fixed-dir out/fixed]] [--export DIR]
+                                [--fix [--fixed-dir out/fixed] [--fixes ID,ID]] [--export DIR]
+                                [--checks ID,ID]
     (or, from the repo root: artpipe validate FILE ... --class prop_small)
 
 Writes <out>/<file name>.report.json per input and prints one summary line
@@ -55,14 +56,25 @@ def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
                    help="where fixed files are saved (default: out/fixed)")
     p.add_argument("--export", type=Path, default=None, metavar="DIR",
                    help="export each passing file to DIR/<stem>.fbx + DIR/<stem>.fbx.report.json")
+    p.add_argument("--checks", default=None, metavar="ID,ID",
+                   help="run only these checks: a PARTIAL report (an agent asking one question)")
+    p.add_argument("--fixes", default=None, metavar="ID,ID",
+                   help="with --fix: apply only these fixes (then re-validate with every check)")
     args = p.parse_args(argv)
     if args.max_offenders < 0:
         p.error("--max-offenders must be >= 0")
+    args.checks = [c for c in args.checks.split(",") if c] if args.checks else None
+    args.fixes = [f for f in args.fixes.split(",") if f] if args.fixes else None
+    if args.fixes and not args.fix:
+        p.error("--fixes needs --fix")
+    if args.checks and args.export:
+        p.error("--export needs every check: a partial report can't gate an FBX")
     return args
 
 
 def validate_file(path: Path, conventions: Conventions, asset_class: AssetClass,
-                  max_offenders: int = OFFENDER_CAP, fix_dir: Optional[Path] = None) -> Report:
+                  max_offenders: int = OFFENDER_CAP, fix_dir: Optional[Path] = None,
+                  checks: Optional[List[str]] = None, fixes_only: Optional[List[str]] = None) -> Report:
     """Open one file and run all checks. Never raises: failures become tool_error.
 
     With fix_dir: apply the safe fixes, save the result to fix_dir/<file name>
@@ -88,12 +100,12 @@ def validate_file(path: Path, conventions: Conventions, asset_class: AssetClass,
     except Exception as exc:  # noqa: BLE001
         return report(shown, digest, tool_error="could not open file: %s: %s" % (type(exc).__name__, exc))
 
-    results, errors = registry.run_all(ctx)
+    results, errors = registry.run_all(ctx, checks)
     if fix_dir is None or errors:
         return report(shown, digest, results=results, tool_error="; ".join(errors) or None)
 
     # --- fix mode -------------------------------------------------------------
-    fixes, errors = registry.apply_fixes(lambda: context.build(shown, conventions, asset_class))
+    fixes, errors = registry.apply_fixes(lambda: context.build(shown, conventions, asset_class), fixes_only)
     if errors:  # a fix crashed: scene state unknown, save nothing
         return report(shown, digest, results=results, fixes=fixes, tool_error="; ".join(errors))
     if not any(f.applied for f in fixes):  # nothing changed: report the original as-is
@@ -115,7 +127,7 @@ def validate_file(path: Path, conventions: Conventions, asset_class: AssetClass,
     except Exception as exc:  # noqa: BLE001
         return report(shown, digest, results=results, fixes=fixes,
                       tool_error="could not save/re-open fixed file: %s: %s" % (type(exc).__name__, exc))
-    results, errors = registry.run_all(ctx)
+    results, errors = registry.run_all(ctx, checks)
     return report(fixed_shown, sha256(fixed), results=results, fixes=fixes,
                   fixed_from={"path": shown, "sha256": digest}, tool_error="; ".join(errors) or None)
 
@@ -225,12 +237,19 @@ def run(argv: Optional[List[str]] = None) -> int:
         print("artpipe: mesh_budgets.yaml severity_overrides name unknown checks: %s"
               % "; ".join(unknown), file=sys.stderr)
         return EXIT_TOOL_ERROR
+    for ids, kind in ((args.checks or [], False), (args.fixes or [], True)):
+        bad = registry.unknown_ids(ids, fixes=kind)
+        if bad:
+            print("artpipe: unknown %s id(s) %s; see `artpipe agent` list_checks"
+                  % ("fix" if kind else "check", ", ".join(bad)), file=sys.stderr)
+            return EXIT_TOOL_ERROR
 
     args.out.mkdir(parents=True, exist_ok=True)
     worst = 0
     for path in args.files:
         fix_dir = args.fixed_dir if args.fix else None
-        report = validate_file(path, conventions, asset_class, args.max_offenders, fix_dir)
+        report = validate_file(path, conventions, asset_class, args.max_offenders, fix_dir,
+                               args.checks, args.fixes)
         # Full file name, not stem: SM_Crate.ma and SM_Crate.fbx must not
         # overwrite each other's report.
         write_report(report, args.out / (path.name + ".report.json"))

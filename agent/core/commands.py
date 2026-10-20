@@ -38,8 +38,22 @@ class Outcome:
 
 
 def argv_for(args: Sequence[str]) -> List[str]:
-    """The process argv: cmd.exe runs the batch file (a .cmd can't be exec'd directly)."""
-    return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", str(ARTPIPE)] + [str(a) for a in args]
+    """The process argv, for display and tests: cmd.exe runs the batch file (a .cmd can't be exec'd)."""
+    return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/s", "/c", str(ARTPIPE)] + [str(a) for a in args]
+
+
+def cmdline_for(args: Sequence[str]) -> str:
+    """The exact Windows command line: every argument quoted, the whole wrapped for `cmd /s /c`.
+
+    Probed: a batch file splits an UNQUOTED argument on , ; = (and spaces):
+    `--checks a,b` reached the validator as two arguments. Python's own
+    quoting (list2cmdline) quotes only arguments with spaces, so the line is
+    built here: each argument in double quotes (check_args has refused any
+    quote inside one), and the command wrapped in one more pair of quotes,
+    which /s tells cmd.exe to strip and nothing else.
+    """
+    inner = " ".join('"%s"' % a for a in [str(ARTPIPE)] + [str(x) for x in args])
+    return '%s /d /s /c "%s"' % (os.environ.get("COMSPEC", "cmd.exe"), inner)
 
 
 def check_args(args: Sequence[str]) -> None:
@@ -49,6 +63,8 @@ def check_args(args: Sequence[str]) -> None:
         if any(c in s for c in '&|<>^%"\r\n'):
             raise ValueError("argument %r contains a character cmd.exe treats as syntax (& | < > ^ %% \" or a "
                              "newline)" % s)
+        if s == "":
+            raise ValueError("an empty argument can't be passed to a batch file (it ends the argument list)")
 
 
 def kill_tree(pid: int) -> None:
@@ -66,7 +82,7 @@ def run(args: Sequence[str], timeout_s: float, env: Optional[Mapping[str, str]] 
     would block a tool forever.
     """
     check_args(args)
-    proc = subprocess.Popen(argv_for(args), cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    proc = subprocess.Popen(cmdline_for(args), cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             stdin=subprocess.DEVNULL, env=dict(env or os.environ),
                             universal_newlines=True, encoding="utf-8", errors="replace")
     try:
@@ -83,7 +99,7 @@ def run_to_files(args: Sequence[str], timeout_s: float, stdout_path: Path, stder
     """Like run(), but the output streams into files as it is printed (a job's live log). (exit code, timed out)."""
     check_args(args)
     with stdout_path.open("wb") as out, stderr_path.open("wb") as err:
-        proc = subprocess.Popen(argv_for(args), cwd=str(cwd), stdout=out, stderr=err, stdin=subprocess.DEVNULL,
+        proc = subprocess.Popen(cmdline_for(args), cwd=str(cwd), stdout=out, stderr=err, stdin=subprocess.DEVNULL,
                                 env=dict(env or os.environ))
         try:
             return proc.wait(timeout=timeout_s), False

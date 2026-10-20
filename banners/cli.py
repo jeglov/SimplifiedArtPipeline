@@ -7,7 +7,8 @@
     artpipe banners render KIT --template T [--placement P] [--locale L] [--repair]
                                              one banner -> out/banners/<kit>/<template>/<placement>/<locale>/
                                              + banner.* checks -> banner.report.json in that folder
-    artpipe banners check FOLDER             re-run the banner checks on a rendered banner
+    artpipe banners check FOLDER [--checks ID,ID]   re-run (some of) the banner checks on a rendered banner
+    artpipe banners checks                   JSON: every kit and banner check
     artpipe banners batch --template T --games G1,G2 [--placement P ...] [--locale L ...] [--no-repair]
                                              every game x placement x locale, reused by input hash
                                              -> out/banners/batch/<template>.batch.json + .sheet.png
@@ -105,6 +106,8 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     bt.add_argument("--out", default=str(OUT))
     ck = sub.add_parser("check", help="re-run the banner checks on a rendered banner folder")
     ck.add_argument("folder", help="out/banners/<kit>/<template>/<placement>/<locale>")
+    ck.add_argument("--checks", default=None, metavar="ID,ID", help="only these checks (a partial report)")
+    sub.add_parser("checks", help="JSON: every kit and banner check (id, severity, fixable, description)")
     a = sub.add_parser("art", help="make a kit image with its provenance sidecar")
     a_sub = a.add_subparsers(dest="slot", required=True)
     h = a_sub.add_parser("hero", help="cut-out of a passing Phase 3 concept run")
@@ -174,7 +177,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 print("  warning batch.distinct: %s" % rec["distinct"]["message"], file=sys.stderr)
             return code
         if args.command == "check":
-            return _verdict(*banner_check.check(rules, Path(os.path.abspath(args.folder))))
+            only = [c for c in args.checks.split(",") if c] if args.checks else None
+            return _verdict(*banner_check.check(rules, Path(os.path.abspath(args.folder)), only=only))
+        if args.command == "checks":
+            print(json.dumps({"kit": banner_checks.describe(banner_checks.KIT_CHECKS),
+                              "banner": banner_checks.describe(banner_checks.BANNER_CHECKS)}, indent=2))
+            return EXIT_OK
         kit_dir = kit_mod.load(args.kit).path
         if args.slot == "hero":
             out = art.hero(kit_dir, Path(os.path.abspath(args.concept_run)))

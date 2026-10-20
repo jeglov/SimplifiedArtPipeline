@@ -157,3 +157,31 @@ bytes (reports identical once their own output folder is normalised); a
 clean / messy / clean sequence doesn't leak state (first and last reports
 identical); a bad token is refused; an argparse error doesn't kill it; a
 killed worker is restarted on the next call.
+
+## Fine tools: one check, one fix (step 5.4)
+
+| Tool | Runs | Returns |
+|---|---|---|
+| `list_checks(domain)` | the registry: `maya` (20 checks, 9 fixes, from the worker), `kit`, `banner` (`artpipe banners checks`) | id, severity, fixable, description per check |
+| `run_check(file, asset_class, check_id)` | `validate --checks ID` in the warm Maya worker | that one result: passed, severity, message, metrics, offenders |
+| `apply_fix(file, asset_class, fix_id)` | `validate --fix --fixes ID` in the worker, the fixed copy under `out/agent/calls/` | what the fix did (or why it was skipped), the fixed file, the re-validation's summary and failing checks |
+| `banners_check(folder, check_ids)` | `banners check FOLDER --checks ...` | status and each result |
+
+The CLI gained the filters the tools need: `validate --checks ID,ID` (a
+PARTIAL report: an agent asking one question), `--fix --fixes ID,ID` (apply
+only those, then re-validate with every check), `banners check --checks`.
+Unknown ids are a tool error (exit 2) before any work; `--fixes` without
+`--fix` and `--checks` with `--export` are refused (a partial report must
+never gate an FBX into Unity). The source scene is never touched; every
+call writes into its own folder under `out/agent/calls/`.
+
+Probed while building it: **a batch file splits an unquoted argument on
+`,` `;` `=`** (and spaces): `--checks scene.history,naming.convention`
+reached the validator as two arguments, so it ran nothing it should. Python's
+`list2cmdline` quotes only arguments with spaces, so the runner now builds
+the command line itself: every argument in double quotes (no quote can be
+inside one: `check_args` refuses them), the whole wrapped for `cmd /s /c`,
+which strips exactly the outer pair. A test pushes `a,b`, `x;y`, `k=v`,
+`a, red, toadstool`, a tab and `!bang` through and gets them back intact.
+Phase 3 met the same splitting on `=` and worked around it (`--param NAME
+VALUE`); this fixes it for every tool.

@@ -43,6 +43,12 @@ def _validate(checks) -> None:
 _validate(KIT_CHECKS + BANNER_CHECKS)
 
 
+def describe(checks: Sequence) -> List[dict]:
+    """The registry as data: what an agent needs to choose a check."""
+    return [{"id": c.ID, "severity": c.SEVERITY.value, "fixable": c.FIXABLE, "description": c.DESCRIPTION}
+            for c in checks]
+
+
 def run_all(checks: Sequence, ctx) -> Tuple[List[CheckResult], List[str]]:
     """(results, tool errors). A crashing check is a tool bug: recorded, and the others still run."""
     results, errors = [], []

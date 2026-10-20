@@ -63,7 +63,21 @@ def test_ordinary_arguments_pass():
 
 def test_argv_runs_the_batch_file_through_cmd():
     argv = commands.argv_for(["banners", "status"])
-    assert argv[1:3] == ["/d", "/c"] and argv[3].endswith("artpipe.cmd") and argv[-2:] == ["banners", "status"]
+    assert argv[1:4] == ["/d", "/s", "/c"] and argv[4].endswith("artpipe.cmd") and argv[-2:] == ["banners", "status"]
+    line = commands.cmdline_for(["banners", "a,b"])
+    assert line.endswith('"%s" "banners" "a,b""' % commands.ARTPIPE)
+
+
+def test_commas_semicolons_equals_and_spaces_arrive_intact():
+    # Probed: a batch file splits an unquoted argument on , ; = : "--checks a,b" arrived as two.
+    weird = ["a,b", "x;y", "k=v", "two words", "a, red, toadstool", "(3/4 view)", "tab\tnot", "!bang"]
+    out = commands.run(["py", "-c", "import sys, json; print(json.dumps(sys.argv[1:]))"] + weird, timeout_s=60)
+    assert json.loads(out.stdout.strip().splitlines()[-1]) == weird
+
+
+def test_an_empty_argument_is_refused():
+    with pytest.raises(ValueError, match="empty argument"):
+        commands.check_args(["validate", ""])
 
 
 def test_run_a_real_command():
