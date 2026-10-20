@@ -11,7 +11,7 @@
     "schema_version": { "const": "1.0" },
     "tool": { "const": "artpipe.gen.repair" },
     "repair_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*-[0-9a-f]{12}$" },
-    "stage": { "enum": ["concept", "model"] },
+    "stage": { "enum": ["concept", "model", "background"] },
     "request": { "type": "object", "required": ["base_seed"], "properties": { "base_seed": { "type": "integer" } } },
     "policy": {
       "type": "object",

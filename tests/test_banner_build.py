@@ -32,7 +32,7 @@ def banner(tmp_path_factory):
 
 def test_outputs_and_what_is_kept(banner):
     names = sorted(p.name for p in banner.folder.iterdir())
-    assert names == ["banner.mp4", "decoded", "frames", "layout.json", "page", "sheet.png"]
+    assert names == ["banner.mp4", "decoded", "frames", "layout.json", "page", "provenance.json", "sheet.png"]
     keys = banner.layout["page"]["key_frames"]
     kept = sorted(p.name for p in (banner.folder / "frames").iterdir())
     assert kept == sorted(["f%05d.png" % n for n in keys] + ["bg%05d.png" % n for n in keys])  # the rest deleted
@@ -102,3 +102,17 @@ def test_check_rebuilds_its_context_from_the_folder_alone(banner):
     from banners import check
     ctx = check.context(RULES, banner.folder)       # template found from layout.json
     assert ctx.template.id == "short_endcard" and ctx.placement.id == "ua_video_9x16"
+
+
+def test_provenance_names_every_licence_and_model(banner):
+    import jsonschema
+    from validate.core.conventions import DEFAULT_DIR
+    prov = json.loads((banner.folder / "provenance.json").read_text(encoding="utf-8"))
+    jsonschema.validate(prov, json.loads((DEFAULT_DIR / "banner_provenance_banner.schema.json").read_text(
+        encoding="utf-8")))
+    assert prov["banner"]["fictional"] is True and prov["banner"]["mp4_sha256"] == tools.sha256_file(banner.mp4)
+    assert set(prov["images"]) == {"background", "hero", "logo"} and prov["images"]["logo"]["models"] == []
+    assert {m["id"] for m in prov["images"]["hero"]["models"]} >= {"z_image_turbo_int8", "birefnet"}
+    assert "OFL-1.1" in prov["licences"] and "model:Apache-2.0" in prov["licences"]
+    assert "tool:GPL-3.0-or-later" in prov["licences"]          # the encoder, which we only run
+    assert str(Path.home()) not in json.dumps(prov)

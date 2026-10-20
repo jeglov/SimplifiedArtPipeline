@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://artpipe.local/conventions/banner_provenance_banner.schema.json",
+  "title": "Banner provenance (banners/core/provenance.py)",
+  "description": "provenance.json next to every banner: the template, the kit's images (with their models and licences) and fonts, the pinned tools, the output's sha256, and the de-duplicated list of licences involved.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tool", "banner", "images", "fonts", "tools", "licences"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "tool": {"const": "artpipe.banners.provenance"},
+    "banner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kit", "game", "fictional", "template", "template_sha256", "placement", "locale", "mp4_sha256", "input_hash"],
+      "properties": {
+        "kit": {"type": "string"}, "game": {"type": "string"}, "fictional": {"type": "boolean"},
+        "template": {"type": "string"}, "template_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "placement": {"type": "string"}, "locale": {"type": "string"},
+        "mp4_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "input_hash": {"type": ["string", "null"]}
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "sha256", "kind", "licence", "models", "run_id"],
+        "properties": {
+          "file": {"type": "string", "pattern": "^[^/\\\\:]+$"},
+          "sha256": {"type": ["string", "null"]},
+          "kind": {"type": ["string", "null"]},
+          "licence": {"type": "string"},
+          "models": {"type": "array", "items": {"type": "object", "required": ["id", "licence"]}},
+          "run_id": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "fonts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["id", "family", "sha256", "licence", "source"]
+      }
+    },
+    "tools": {
+      "type": "object",
+      "required": ["chromium", "ffmpeg", "playwright"],
+      "additionalProperties": {"type": "string"}
+    },
+    "licences": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+  }
+}

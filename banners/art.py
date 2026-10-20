@@ -1,7 +1,10 @@
 """Kit art: make a kit's images, each with its provenance sidecar.
 
     artpipe banners art hero KIT --from CONCEPT_RUN         cut-out of a Phase 3 concept (image + mask)
-    artpipe banners art background KIT --prompt P [--seed N] Z-Image on the pinned ComfyUI, once per game
+    artpipe banners art background KIT --prompt P [--seed N] [--repair [--template T]]
+                                                             Z-Image on the pinned ComfyUI, once per game;
+                                                             --repair: retry the seed while the hero would
+                                                             blend in (kit.background, Phase 3 repair engine)
     artpipe banners art logo KIT                             KIT/logo.html rendered by the pinned Chromium
 
 Each writes <kit>/<slot>.png and <slot>.png.provenance.json: the output's
@@ -18,7 +21,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 from banners import render
 from banners.core import ToolError
@@ -89,21 +92,100 @@ def hero(kit_dir: Path, concept_run: Path) -> Path:
     return _write(kit_dir, "hero", encode_png(w, h, 4, data), record)
 
 
+def _background_pairs(prompt: str, seed: int, width: int, height: int):
+    return ["prompt=" + " ".join(prompt.split()), "seed=%d" % seed, "width=%d" % width, "height=%d" % height]
+
+
 def background(kit_dir: Path, prompt: str, seed: int, width: int, height: int,
                out_dir: Optional[Path] = None) -> Path:
     """One background per game on the pinned ComfyUI (the concept workflow; its mask is ignored)."""
     from gen import cli as gen_cli  # only this command needs ComfyUI
-    pairs = ["prompt=" + " ".join(prompt.split()), "seed=%d" % seed, "width=%d" % width, "height=%d" % height]
-    code, message, run_dir = gen_cli.generate(BACKGROUND_WORKFLOW, pairs, out_dir or gen_cli.RUNS)
+    code, message, run_dir = gen_cli.generate(BACKGROUND_WORKFLOW, _background_pairs(prompt, seed, width, height),
+                                              out_dir or gen_cli.RUNS)
     if code != 0:
         raise ToolError("background generation failed: %s" % message)
+    return keep_background(kit_dir, run_dir, seed, width, height)
+
+
+def keep_background(kit_dir: Path, run_dir: Path, seed: int, width: int, height: int,
+                    repair: Optional[Dict[str, Any]] = None) -> Path:
+    """Copy a background run's image into the kit with its provenance sidecar."""
     m = _manifest(run_dir)
     image = run_dir / "image.png"
     record = {"kind": "generated", "licence": "generated", "models": _models(m),
               "from": {"run_id": m["run_id"], "run": _shown(run_dir), "workflow": BACKGROUND_WORKFLOW,
                        "prompt": m["params"].get("prompt"), "seed": seed, "width": width, "height": height,
                        "image_sha256": _sha(image)}}
+    if repair:
+        record["settings"] = {"repair": repair}
     return _write(kit_dir, "background", image.read_bytes(), record)
+
+
+BACKGROUND_STAGE = "background"
+BACKGROUND_REPORT = "background.report.json"
+
+
+def background_report(run_dir: Path, kit_dir: Path, template_id: str, rules: BannerRules):
+    """The kit.background check of a generated image against the kit's hero, as the stage's report.
+
+    In the kit report kit.background is a warning (a human may accept a
+    clash on purpose); here it is the gate of the generation stage, so it is
+    an error and the repair loop retries on it.
+    """
+    import dataclasses
+    from banners.core import template as template_mod
+    from banners.core.checks import kit_background
+    from banners.core.checks.context import KitContext
+    from validate.core.result import Report, Severity
+    kit = kit_mod.load(str(kit_dir))
+    image = run_dir / "image.png"
+    trial = dataclasses.replace(kit, images=dict(kit.images, background=kit_mod.Image(
+        "background", image, "generated", kit_mod.provenance_path(image), None)))
+    ctx = KitContext(template_mod.load(template_id), trial, kit_mod.load_fonts(), rules, ("en",),
+                     tuple(sorted(rules.placements)))
+    result = dataclasses.replace(kit_background.run(ctx), severity=Severity.ERROR)
+    report = Report(_shown(image), _sha(image), "banner_background", results=[result], tool="artpipe.banners.art")
+    path = run_dir / BACKGROUND_REPORT
+    with path.open("w", encoding="utf-8", newline="\n") as fh:
+        fh.write(report.to_json())
+    return report, path
+
+
+def background_repaired(kit_dir: Path, prompt: str, seed: int, width: int, height: int, rules: BannerRules,
+                        template_id: str = "hero_endcard", out_dir: Optional[Path] = None
+                        ) -> Tuple[int, str, Optional[Path]]:
+    """Generate, check the hero against it, retry by seed (generation.yaml `repair`). Keeps the accepted one.
+
+    Returns (exit code, message, the kit's background.png or None if handed over).
+    """
+    from gen import cli as gen_cli
+    from gen.core import repair as gen_repair
+    runs = out_dir or gen_cli.RUNS
+    run_dirs: Dict[int, Path] = {}
+
+    def attempt(s: int) -> "gen_repair.Outcome":
+        try:
+            code, message, run_dir = gen_cli.generate(BACKGROUND_WORKFLOW, _background_pairs(prompt, s, width, height),
+                                                      runs, keep_server=True)
+        except ToolError as exc:
+            return gen_repair.Outcome(2, message=str(exc))
+        if code != 0:
+            return gen_repair.Outcome(2, message=message)
+        run_dirs[s] = run_dir
+        report, path = background_report(run_dir, kit_dir, template_id, rules)
+        execution = (json.loads((run_dir / "manifest.json").read_text(encoding="utf-8")).get("execution") or {})
+        return gen_repair.Outcome(report.exit_code, report.to_dict(), _shown(path), _shown(run_dir),
+                                  execution.get("seconds"), "(reused)" in message, message)
+
+    request = {"kit": kit_mod.load(str(kit_dir)).id, "template": template_id, "prompt": " ".join(prompt.split()),
+               "width": width, "height": height, "base_seed": seed}
+    code, message, rec = gen_cli.with_repair(BACKGROUND_STAGE, request, seed, attempt, runs)
+    if code != 0:
+        return code, message, None
+    last = rec["attempts"][-1]
+    out = keep_background(kit_dir, run_dirs[last["seed"]], last["seed"], width, height,
+                          {"repair_id": rec["repair_id"], "attempts": len(rec["attempts"])})
+    return code, message, out
 
 
 def logo(kit_dir: Path, rules: BannerRules, fonts: Optional[Mapping[str, kit_mod.Font]] = None) -> Path:

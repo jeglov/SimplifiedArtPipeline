@@ -373,3 +373,51 @@ proves the N-game path on the 1 s template with three kits (the shipped
 one, a synthetic second game, and a clone that must be flagged), reuse on a
 second run, a one-game change re-rendering only that game, a rule change
 invalidating the cache, and a broken kit being skipped.
+
+## Kit art: provenance and the background check (step 4.8)
+
+**`provenance.json`** next to every banner
+(`conventions/banner_provenance_banner.schema.json`): the template and its
+hash, the game (and that it is fictional), every kit image with its kind,
+licence, the models that made it (id, licence, sha256) and their run id,
+every font with its licence and source, the tool versions, the MP4's hash
+and (from the batch) the input hash; `licences` is the de-duplicated list a
+legal review reads first. For Spotcap Grove: OFL-1.1 (fonts), own-work
+(logo), generated with model:Apache-2.0 and model:MIT (Z-Image, Qwen3, VAE,
+BiRefNet), tool:GPL-3.0-or-later (ffmpeg, which we only run),
+tool:BSD-3-Clause, tool:Apache-2.0.
+
+**`kit.background`** (warning, a kit check, `banners/core/background.py`):
+the check that didn't exist when the first render showed a red mushroom
+hero lost among red mushrooms. Where the template puts the hero, the share
+of a ring around its box (15 % of the box size) whose saturated colour has
+the hero's dominant hue (within 20 degrees), with the background placed
+exactly as the page draws it. Calibrated on the two real Spotcap
+backgrounds:
+
+| Background | Hero-hue share around the hero | Clutter behind text |
+|---|---|---|
+| seed 7, rejected by eye in 4.4 (red mushrooms everywhere) | **37.4 %** | 7.85 |
+| seed 11, shipped (dark clearing) | **0.1 %** | 7.99 |
+
+`checks.hero_clash_max` is 10 %. Clutter (mean luminance step between
+neighbours inside the text boxes) is recorded, not judged: both backgrounds
+measure the same, so there is no evidence for a threshold, and it is
+luminance only (this red and this green are 86 vs. 91: a luminance measure
+can't see a red/green edge; a test pins that).
+
+**`artpipe banners art background KIT --prompt P --repair`** runs the
+generation through the Phase 3 repair engine (`gen.cli.with_repair`,
+stage `background`, policy in `generation.yaml`: `kit.background: retry`):
+generate, check the kit's hero against the result (in the stage report the
+check is an error: it gates the stage; in the kit report it stays a
+warning, a human may accept a clash on purpose), retry with seed + 1000,
+at most 3 attempts, the record in `out/gen/repairs/`. On the rejected
+prompt: seed 7 (37 %) retry, seed 1007 retry, seed 2007 accepted (3.5 %),
+~15 s of GPU per attempt.
+
+Looked at, not only measured: the accepted seed 2007 has a clear centre
+behind the hero, so figure-ground passes, but it is still a bright,
+red-mushroom world, and by eye the shipped seed 11 (a darker prompt) is the
+better background. A seed retry fixes composition; art direction is the
+prompt's job, and stays a human's (or later the agent's, #48).

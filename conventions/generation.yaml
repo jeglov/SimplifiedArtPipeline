@@ -169,3 +169,7 @@ repair:
     # new concept, backlog #53) does.
     model.triangles: stop
     model.textures: stop   # the workflow didn't bake: a workflow bug, not bad luck
+    # Banner backgrounds (Phase 4, `artpipe banners art background --repair`):
+    # the hero lost in a background of its own colour is a dice roll of the
+    # composition; another seed usually fixes it.
+    kit.background: retry

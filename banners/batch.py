@@ -100,6 +100,11 @@ def one_banner(rules: BannerRules, template: template_mod.Template, kit: kit_mod
                           failed=[], warnings=[], message=str(exc))
             return record
         report = _read(folder / banner_check.REPORT)
+        prov = _read(folder / "provenance.json")
+        if prov:   # the batch knows the input hash; a lone render doesn't
+            prov["banner"]["input_hash"] = digest
+            with (folder / "provenance.json").open("w", encoding="utf-8", newline="\n") as fh:
+                fh.write(json.dumps(prov, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
         with (folder / INPUTS).open("w", encoding="utf-8", newline="\n") as fh:
             fh.write(json.dumps({"hash": digest, "inputs": parts}, indent=1, sort_keys=True) + "\n")
         record.update(reused=False, seconds=round(time.time() - started, 1), renders=renders)

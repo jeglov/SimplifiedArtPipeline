@@ -15,10 +15,11 @@ from banners.core.checks import (banner_bitrate, banner_contrast, banner_cta_con
                                   banner_dimensions, banner_duration, banner_end_card, banner_file_budget,
                                   banner_file_size, banner_first_frame, banner_font_fallback, banner_format,
                                   banner_frame_rate, banner_logo, banner_safe_zone, banner_text_fit,
-                                  banner_text_size, kit_colours, kit_files, kit_images, kit_licences, kit_slots)
+                                  banner_text_size, kit_background, kit_colours, kit_files, kit_images, kit_licences,
+                                  kit_slots)
 from validate.core.result import CheckResult
 
-KIT_CHECKS = (kit_slots, kit_files, kit_licences, kit_colours, kit_images)
+KIT_CHECKS = (kit_slots, kit_files, kit_licences, kit_colours, kit_images, kit_background)
 # Cheap file facts first, then the layout record, then pixels (the slow ones).
 BANNER_CHECKS = (banner_dimensions, banner_format, banner_duration, banner_frame_rate, banner_file_size,
                  banner_file_budget, banner_bitrate, banner_font_fallback, banner_text_fit, banner_text_size,

@@ -98,6 +98,7 @@ class CheckRules:
     first_frame_min_std: float
     logo_aspect_tolerance: float
     batch_distinct_min: float
+    hero_clash_max: float
 
 
 REPAIR_ACTIONS = ("shrink_text", "with_text_fit", "recolour_text", "recolour_cta", "stop")
@@ -250,7 +251,8 @@ def _checks(r: _Reader) -> CheckRules:
                    _share(r, "cta_min_height_share"), _share(r, "cta_min_text_share"), ratios["contrast_min"],
                    _share(r, "contrast_percentile"), ratios["cta_text_contrast_min"], ratios["cta_fill_contrast_min"],
                    _nonneg(r, "end_card_min_s"), _nonneg(r, "first_frame_min_std"),
-                   _nonneg(r, "logo_aspect_tolerance"), _share(r, "batch_distinct_min"))
+                   _nonneg(r, "logo_aspect_tolerance"), _share(r, "batch_distinct_min"),
+                   _share(r, "hero_clash_max"))
     r.done()
     return c
 

@@ -85,7 +85,7 @@ def with_change(fn):
 def test_a_complete_kit_passes_every_check(tmp_path):
     res = results(make_kit(tmp_path))
     assert all(r.passed for r in res.values()), {k: r.message for k, r in res.items() if not r.passed}
-    assert list(res) == ["kit.slots", "kit.files", "kit.licences", "kit.colours", "kit.images"]
+    assert list(res) == ["kit.slots", "kit.files", "kit.licences", "kit.colours", "kit.images", "kit.background"]
 
 
 def test_the_shipped_kit_passes(tmp_path):

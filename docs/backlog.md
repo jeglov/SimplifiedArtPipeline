@@ -49,6 +49,7 @@ P2 Unity import · P3 AI generation · P4 banners · P5 MCP agent + docs.
 | 62 | P5 | Glyph coverage (a kit's strings vs. its fonts) is only known at render time, from Chromium's font record | A Russian kit with Fredoka renders 240 frames before the fallback is found; an agent would rather know at `artpipe banners kit` | A `kit.glyphs` check reading each font's `cmap` table (TrueType format 4/12, pure Python) against every string, per locale |
 | 63 | P5 | Line breaks are the browser's (balanced with `text-wrap: balance`), never the copywriter's | A headline should break at the comma ("Merge mushrooms, / grow a magic grove!"), and German compound words need hyphenation points; balance only evens the lengths | A soft break / hyphenation hint in the kit strings (e.g. `
 ` or U+00AD soft hyphen), and `lang` hyphenation dictionaries per locale, checked by `banner.text_fit` like any other text |
+| 64 | P5 | `kit.background` judges hue around the hero only; clutter behind text is luminance-only and has no threshold (both real backgrounds measure ~7.9) | A busy, high-detail background behind a headline, or a red/green edge (equal luminance), passes; and a seed retry fixes composition, not art direction (seed 2007 passed but is still a bright red-mushroom world) | Measure clutter in a perceptual space (CIELAB delta-E between neighbours) over a batch of approved/rejected backgrounds before setting a threshold; a vision-model review (#48) for "does this background fit the game's look" |
 
 ## Done
 

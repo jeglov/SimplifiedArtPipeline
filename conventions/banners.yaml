@@ -118,6 +118,10 @@ checks:
   # the L1 distance of 64-cell colour histograms, 0 = same colours, 1 = none
   # in common) look like the same game in a feed. Measured in step 4.7.
   batch_distinct_min: 0.2
+  # kit.background (a warning): share of the background ring around the hero
+  # with the hero's hue. Measured: the rejected Spotcap background (red
+  # mushrooms behind a red mushroom) 37 %, the accepted one 0.1 %.
+  hero_clash_max: 0.1
 
 # The repair step (banners/repair.py, banners/core/repair.py): what a failed
 # banner does next. Every blocking failure is looked up in `actions`; if any

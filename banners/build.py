@@ -7,6 +7,7 @@
         frames/            rendered key frames (f*.png) and their text-hidden passes (bg*.png)
         decoded/           key frames decoded back from banner.mp4 (what the checks look at)
         sheet.png          the decoded key frames side by side, for a human
+        provenance.json    what it was made from, by what, under which licences
 
 The other 230-odd rendered frames are deleted after the encode: at ~2-3 MB
 each they would cost ~600 MB per banner.
@@ -78,6 +79,13 @@ def render_banner(rules: BannerRules, template: Template, kit: Kit, fonts: Mappi
     layout.pop("refused", None)
     with (folder / "layout.json").open("w", encoding="utf-8", newline="\n") as fh:
         fh.write(json.dumps(layout, sort_keys=True, separators=(",", ":")) + "\n")
+    from banners import tools
+    from banners.core import provenance
+    prov = provenance.build(template_id=template.id, template_sha256=tools.sha256_file(template.path), kit=kit,
+                            fonts=fonts, rules=rules, placement=placement, locale=locale,
+                            mp4_sha256=tools.sha256_file(mp4))
+    with (folder / "provenance.json").open("w", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(prov, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
     for f in (frames_dir / "job.json", frames_dir / "layout.json"):
         if f.exists():
             f.unlink()   # job.json holds absolute paths; the layout lives one level up

@@ -116,6 +116,8 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     b.add_argument("--seed", type=int, default=0)
     b.add_argument("--width", type=int, default=864)
     b.add_argument("--height", type=int, default=1536)
+    b.add_argument("--repair", action="store_true", help="retry the seed while the hero would blend in")
+    b.add_argument("--template", default="hero_endcard", help="where the hero sits (for --repair)")
     lg = a_sub.add_parser("logo", help="KIT/logo.html rendered by the pinned Chromium")
     lg.add_argument("kit")
     return p.parse_args(argv)
@@ -176,6 +178,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         kit_dir = kit_mod.load(args.kit).path
         if args.slot == "hero":
             out = art.hero(kit_dir, Path(os.path.abspath(args.concept_run)))
+        elif args.slot == "background" and args.repair:
+            code, message, out = art.background_repaired(kit_dir, args.prompt, args.seed, args.width, args.height,
+                                                         rules, args.template)
+            print("artpipe banners: %s" % message, file=sys.stdout if code == EXIT_OK else sys.stderr)
+            if out is None:
+                return code
         elif args.slot == "background":
             out = art.background(kit_dir, args.prompt, args.seed, args.width, args.height)
         else:
