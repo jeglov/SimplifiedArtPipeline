@@ -278,3 +278,37 @@ ids are checked; and over MCP the full round trip (request, `queue_run`
 refused while pending, `artpipe queue approve` by the human, `queue_run`
 regenerates the logo of a kit copy, a second run refused), no
 approve-like tool exists, and a job that exits 1 lands in the queue.
+
+## Judgement tools (step 5.7, backlog #48, #53)
+
+The pipeline doesn't judge taste; the client's model does, by looking. The
+review tools return images (MCP image content) with the facts and the
+questions no check answers:
+
+| Tool | Returns | Questions it asks the model |
+|---|---|---|
+| `review_concept(concept_run)` | the concept image, its mask, the concept checks, the prompt | the right object? a shaded 3D object, not a flat 2D drawing? any text or logo? the game's style? |
+| `review_banner(folder)` | the contact sheet (decoded key frames), the report | does the hero stand out at thumbnail size? natural line breaks? does it look like this game? would a UA lead ship it? |
+| `review_image(path)` | any PNG under `out/` or `banners/kits/` | |
+| `record_review(target, verdict, notes)` | the stored review (`out/agent/reviews/`) | |
+| `retry_concept(previous_run, subject, asset_class, style, reason)` | a GPU job with the new subject | |
+
+The questions come from what Phase 3 and 4 measured the checks missing
+(`docs/generation.md` "What the checks can't see yet": the potion drawn as
+a flat icon; this phase's red-mushroom background).
+
+A verdict is a record, not a gate: the pipeline stays deterministic, and a
+human reads what the agent decided and why. A new prompt is bounded:
+`judgement.max_prompt_changes` (2) per original concept, every change with
+its reason, in `out/agent/reviews/lineage/`; a retry of a retry counts
+against the same original (its run is resolved from the job's output). Past
+the budget, `retry_concept` refuses before any GPU time: a human decides.
+Images over `judgement.max_image_bytes` (5 MB) are refused rather than
+sent.
+
+Tested (`tests/test_agent_judgement.py`): verdict and notes required, the
+budget (exactly the max allowed, then refused), a retry's run counted
+against its original, and over MCP: `review_concept` returns text then a
+PNG with the questions, `record_review` stores the verdict, path refusals,
+a kit image, `retry_concept` refused past the budget, and `review_banner`
+returning the sheet of a real render.

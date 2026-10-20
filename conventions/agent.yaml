@@ -27,6 +27,15 @@ gated:
   - banners_art_logo
   - golden_rerecord          # changes what the golden test accepts
 
+# Judgement stays with the client's model (it looks at the images the review
+# tools return); the pipeline only bounds what a judgement may set off.
+judgement:
+  # New prompts an agent may try from one original concept (retry_concept),
+  # each recorded with its reason. Past it, a human decides (backlog #53).
+  max_prompt_changes: 2
+  # Largest image a review tool returns (bytes): a contact sheet is ~0.7-2.4 MB.
+  max_image_bytes: 5000000
+
 server:
   name: artpipe
   # A tool that returns its answer directly must answer within this; anything

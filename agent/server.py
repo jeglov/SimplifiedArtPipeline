@@ -405,6 +405,97 @@ def queue_run(item_id: str) -> Dict[str, Any]:
     return dict(started, queue_item=item_id)
 
 
+# --- judgement (step 5.7): the client's model judges, the pipeline records and bounds ------------
+
+from mcp.server.mcpserver.utilities.types import Image  # noqa: E402
+
+from agent.core import reviews  # noqa: E402
+
+# What the concept checks can't see (docs/generation.md "What the checks can't see yet").
+CONCEPT_QUESTIONS = (
+    "Is it the object that was asked for (not a different object)?",
+    "Is it a shaded 3D-looking object, not a flat 2D drawing or an icon (flat art breaks image-to-3D)?",
+    "Is there any text, logo or watermark in it (there must be none)?",
+    "Does it match the game's style?",
+)
+BANNER_QUESTIONS = (
+    "Does the hero stand out from the background, at thumbnail size?",
+    "Do the headline line breaks read naturally (not split mid-phrase)?",
+    "Does it look like this game, and not like another game's banner?",
+    "Would a UA lead ship it: CTA readable, nothing awkwardly cropped or overlapping?",
+)
+
+
+def _image(path: Path):
+    if path.stat().st_size > RULES.judgement.max_image_bytes:
+        raise ValueError("%s is %.1f MB, over the %.1f MB review limit" % (
+            _rel(path), path.stat().st_size / 1e6, RULES.judgement.max_image_bytes / 1e6))
+    return Image(path=path)
+
+
+@tool(description="Look at a concept image the way an art director would. Returns the image, its mask and the "
+                  "concept checks' results, plus the questions no check can answer (wrong object, flat 2D drawing, "
+                  "text or logo, off-style). Judge them yourself, then call record_review; if it's wrong, "
+                  "retry_concept with a better subject.")
+def review_concept(concept_run: str) -> list:
+    run = _inside(concept_run, "out/gen/runs")
+    rep = _report(run / "concept.report.json")
+    facts = {"run": _rel(run), "status": rep.get("status"),
+             "checks": [{"id": r["id"], "passed": r["passed"], "message": r["message"]} for r in rep.get("results") or []],
+             "prompt": (_report(run / "manifest.json").get("params") or {}).get("prompt"),
+             "questions": list(CONCEPT_QUESTIONS),
+             "earlier_reviews": reviews.list_reviews(_rel(run))}
+    out = [json.dumps(facts, indent=1), _image(run / "image.png")]
+    if (run / "mask.png").is_file():
+        out.append(_image(run / "mask.png"))
+    return out
+
+
+@tool(description="Look at a rendered banner: its contact sheet (key frames decoded from the MP4) and its report, "
+                  "plus the questions the 17 checks can't answer (does the hero pop, natural line breaks, does it "
+                  "look like this game). Judge, then call record_review.")
+def review_banner(folder: str) -> list:
+    d = _inside(folder, "out")
+    rep = _report(d / "banner.report.json")
+    facts = {"folder": _rel(d), "status": rep.get("status"), "summary": rep.get("summary"),
+             "failing": [{"id": r["id"], "message": r["message"]} for r in rep.get("results") or [] if not r["passed"]],
+             "questions": list(BANNER_QUESTIONS), "earlier_reviews": reviews.list_reviews(_rel(d))}
+    return [json.dumps(facts, indent=1), _image(d / "sheet.png")]
+
+
+@tool(description="Return any PNG the pipeline wrote under out/ or a kit image under banners/kits/, to look at.")
+def review_image(path: str) -> list:
+    p = _inside(path, "out", "banners/kits")
+    if p.suffix.lower() != ".png":
+        raise ValueError("only PNG images: %s" % path)
+    return [_rel(p), _image(p)]
+
+
+@tool(description="Record your judgement of something you reviewed (target: a concept run, a banner folder or an "
+                  "image path): verdict good, reject or unsure, and notes saying what you saw. Recorded for humans in "
+                  "out/agent/reviews/; it gates nothing by itself.")
+def record_review(target: str, verdict: str, notes: str) -> Dict[str, Any]:
+    return reviews.record(target, verdict, notes)
+
+
+@tool(description="Try a new subject for a concept you rejected (or one the repair loop handed over), keeping its "
+                  "asset class and style. Bounded: at most judgement.max_prompt_changes new prompts from one original "
+                  "concept (conventions/agent.yaml), each recorded with its reason; past that a human decides. "
+                  "A GPU job.")
+def retry_concept(previous_run: str, subject: str, asset_class: str, style: str, reason: str) -> Dict[str, Any]:
+    if not reason.strip():
+        raise ValueError("say why the previous concept was wrong")
+    prev = _rel(_inside(previous_run, "out/gen/runs"))
+    root = reviews.root_of(prev)
+    if reviews.budget_left(root, RULES.judgement.max_prompt_changes) <= 0:
+        raise ValueError("%d prompt change(s) already made from %s (max %d): a human decides what next"
+                         % (RULES.judgement.max_prompt_changes, root, RULES.judgement.max_prompt_changes))
+    started = gen_concept(subject, asset_class, style)
+    data = reviews.add_change(root, subject, reason, started["job_id"], RULES.judgement.max_prompt_changes)
+    return dict(started, root=root, prompt_changes=len(data["changes"]),
+                left=RULES.judgement.max_prompt_changes - len(data["changes"]))
+
+
 def main() -> None:
     server.run("stdio")
 

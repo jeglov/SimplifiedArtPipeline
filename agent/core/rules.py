@@ -19,6 +19,12 @@ class ServerRules:
 
 
 @dataclass(frozen=True)
+class JudgementRules:
+    max_prompt_changes: int
+    max_image_bytes: int
+
+
+@dataclass(frozen=True)
 class AgentRules:
     python: str
     venv: str
@@ -26,6 +32,7 @@ class AgentRules:
     lock: str
     server: ServerRules
     gated: tuple = ()
+    judgement: JudgementRules = JudgementRules(2, 5000000)
 
 
 def _version(r: _Reader, key: str) -> str:
@@ -54,8 +61,11 @@ def parse(data: dict) -> AgentRules:
     gated = root.get("gated", list)
     if not gated or not all(isinstance(g, str) and re.match(r"^[a-z][a-z0-9_]*$", g) for g in gated):
         raise ConventionError("%s.gated: a list of snake_case action names" % FILE)
+    j = root.sub("judgement")
+    judgement = JudgementRules(_positive(j, "max_prompt_changes"), _positive(j, "max_image_bytes"))
+    j.done()
     rules = AgentRules(_version(root, "python"), venv, _version(root, "mcp_version"), root.get("lock", str), server,
-                       tuple(gated))
+                       tuple(gated), judgement)
     root.done()
     return rules
 

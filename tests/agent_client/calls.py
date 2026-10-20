@@ -26,7 +26,10 @@ async def main(calls):
             s = r.structured_content or {}
             texts = [c.text for c in r.content if getattr(c, "type", None) == "text"]
             out.append({"tool": tool, "is_error": bool(r.is_error), "result": s.get("result", s),
-                        "text": "\n".join(texts)[-3000:]})
+                        "text": "\n".join(texts)[-3000:],
+                        "types": [getattr(c, "type", None) for c in r.content],
+                        "mime": [getattr(c, "mime_type", None) for c in r.content
+                                 if getattr(c, "type", None) == "image"]})
     print(json.dumps(out, default=str))
 
 
