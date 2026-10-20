@@ -185,3 +185,44 @@ which strips exactly the outer pair. A test pushes `a,b`, `x;y`, `k=v`,
 `a, red, toadstool`, a tab and `!bang` through and gets them back intact.
 Phase 3 met the same splitting on `=` and worked around it (`--param NAME
 VALUE`); this fixes it for every tool.
+
+## Coarse tools (step 5.5)
+
+| Tool | Kind | Writes |
+|---|---|---|
+| `validate(file, asset_class, fix, export)` | warm Maya worker | `out/agent/calls/validate-*/` (report, fixed `.ma`, FBX + its report) |
+| `texture_check(files, asset_class)` | call | nothing |
+| `gen_concept`, `gen_model` | GPU jobs | `out/gen/runs/`, `out/gen/repairs/` |
+| `gen_ingest(model_run, asset_class, name)` | job (Maya) | `out/gen/assets/<name>/` |
+| `banners_kit(kit, template)` | call | `out/banners/kits/` |
+| `banners_render`, `banners_batch` | jobs | `out/banners/` |
+| `banners_check` | call | the banner folder's `banner.report.json` |
+| `unity_verify` | job (Unity, read-only) | nothing in the project |
+| `read_report(path)` | call | nothing: any JSON or log under `out/` |
+| `read_conventions(name)` | call | nothing: any file in `conventions/` ("never guess a number") |
+
+Everything here writes only under `out/`. The tools that write into the
+Unity project (`build`, `generate`) or overwrite kit art (`banners art
+...`) are not exposed: they go through the approval queue (step 5.6), and a
+test asserts they're absent from the tool list. `read_report` and
+`read_conventions` refuse any path that resolves outside their folder
+(`../`, absolute paths, `out/../CLAUDE.md`).
+
+Probed: **the SDK hides every exception message except its own
+`ToolError`**: a refused path reached the agent as "Error executing tool
+read_report", with no reason. Every tool is now registered through
+`@tool`, which turns anticipated failures (ValueError, KeyError, OSError,
+the pipeline's ToolError) into the SDK's `ToolError` with the message
+("ValueError: CLAUDE.md is outside out: refused"; "KeyError: no job ...").
+A real bug stays hidden from the model and goes to the server log. A test
+checks that the wrapper keeps every tool's input schema (`functools.wraps`).
+
+Tested over MCP (`tests/test_agent_coarse_tools.py`): validate plain and
+with fix + export (exit 1 then 0, every file under `out/agent/calls/`),
+texture_check, banners_kit (its report path and results), the four path
+refusals with their reason, read_conventions and read_report, a
+banners_batch job (handed over: the 1 s spot), unity_verify (marker unity),
+gen_ingest on an existing model run (marker maya), the input schemas, and
+the gated tools' absence. `gen_model` uses the same GPU job path as
+`gen_concept` (proven with live progress in 5.2) and the Phase 3 CLI; a
+full image-to-3D over MCP (~5 GPU minutes) isn't in the suite.

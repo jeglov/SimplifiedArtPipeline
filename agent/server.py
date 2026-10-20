@@ -13,6 +13,7 @@ failed (or was handed over) / 2 tool error.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import subprocess
@@ -21,7 +22,9 @@ from pathlib import Path
 from typing import Any, Dict
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError as SdkToolError
 
+from agent.core import ToolError as AgentToolError
 from agent.core import commands
 from agent.core import jobs
 from agent.core import rules as agent_rules
@@ -39,6 +42,28 @@ Rules live in conventions/ (read them with the info tool); never guess a budget 
 """
 
 server = MCPServer(RULES.server.name, instructions=INSTRUCTIONS, version="phase5")
+
+# Failures an agent can act on (a refused path, an unknown job or check id, a
+# missing file, a tool error the pipeline reports). Probed: the SDK shows the
+# model ONLY "Error executing tool <name>" for any exception other than its own
+# ToolError, so a refusal without its reason is useless. These are re-raised
+# as the SDK's ToolError with our message; anything else is a bug and stays
+# hidden (the server logs its traceback).
+ANTICIPATED = (ValueError, KeyError, OSError, AgentToolError)
+
+
+def tool(**kw):
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapped(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except ANTICIPATED as exc:
+                msg = exc.args[0] if isinstance(exc, KeyError) and exc.args else str(exc)
+                raise SdkToolError("%s: %s" % (type(exc).__name__, msg)) from exc
+        server.tool(**kw)(wrapped)
+        return fn
+    return deco
 
 
 def _sha(path: Path) -> str:
@@ -60,7 +85,7 @@ def _json_or_text(text: str) -> Any:
         return text.strip()
 
 
-@server.tool(description="What this artpipe is: repo commit, the rules files (with sha256), the agent "
+@tool(description="What this artpipe is: repo commit, the rules files (with sha256), the agent "
                          "layer's pins, and whether the banner renderer's pinned tools are installed. "
                          "Call it first in a session.")
 def artpipe_info() -> Dict[str, Any]:
@@ -95,7 +120,7 @@ def _gpu_progress(job_id: str):
     return comfy.progress(since=int(rec.get("comfy_log_offset") or 0))
 
 
-@server.tool(description="State of a job: queued (with its queue position), running (with the log tail and, "
+@tool(description="State of a job: queued (with its queue position), running (with the log tail and, "
                          "for GPU jobs, ComfyUI's step progress), done (exit code and meaning), cancelled or lost.")
 def job_status(job_id: str) -> Dict[str, Any]:
     out = jobs.status(job_id)
@@ -105,18 +130,18 @@ def job_status(job_id: str) -> Dict[str, Any]:
     return out
 
 
-@server.tool(description="A finished job's exit code, meaning and full output (capped). Before it finishes, "
+@tool(description="A finished job's exit code, meaning and full output (capped). Before it finishes, "
                          "the same as job_status.")
 def job_result(job_id: str) -> Dict[str, Any]:
     return jobs.result(job_id)
 
 
-@server.tool(description="Cancel a queued or running job; its command and every process under it are killed.")
+@tool(description="Cancel a queued or running job; its command and every process under it are killed.")
 def job_cancel(job_id: str) -> Dict[str, Any]:
     return jobs.cancel(job_id)
 
 
-@server.tool(description="Every job with its state, newest last. state filters (queued, running, done, "
+@tool(description="Every job with its state, newest last. state filters (queued, running, done, "
                          "cancelled, lost).")
 def job_list(state: str = "") -> Dict[str, Any]:
     rows = [{k: r[k] for k in ("id", "tool", "state", "resource", "created", "exit_code", "meaning")}
@@ -124,7 +149,7 @@ def job_list(state: str = "") -> Dict[str, Any]:
     return {"jobs": rows, "count": len(rows)}
 
 
-@server.tool(description="Render one UA banner (template x kit x placement x locale), check it, and with "
+@tool(description="Render one UA banner (template x kit x placement x locale), check it, and with "
                          "repair=True fix and re-render it per conventions/banners.yaml. A job (~2-5 min). "
                          "Result: exit 0 pass / 1 handed over (repair.json says why) / 2 tool error; the banner "
                          "folder is out/banners/<kit>/<template>/<placement>/<locale>/.")
@@ -134,7 +159,7 @@ def banners_render(kit: str, template: str, placement: str = "ua_video_9x16", lo
     return _start("banners_render", args + (["--repair"] if repair else []))
 
 
-@server.tool(description="Generate a concept image for an asset on the pinned ComfyUI and check it for "
+@tool(description="Generate a concept image for an asset on the pinned ComfyUI and check it for "
                          "image-to-3D (artpipe gen concept). A GPU job: queued behind other GPU jobs. "
                          "style is an id from conventions/gen_styles.yaml, asset_class from mesh_budgets.yaml.")
 def gen_concept(subject: str, asset_class: str, style: str, seed: int = 0, repair: bool = True) -> Dict[str, Any]:
@@ -175,7 +200,7 @@ def _report(path: Path) -> Dict[str, Any]:
         return {}
 
 
-@server.tool(description="List the checks (and fixes) you can run. domain: maya (scene checks + safe fixes), "
+@tool(description="List the checks (and fixes) you can run. domain: maya (scene checks + safe fixes), "
                          "kit (game kit checks), banner (rendered banner checks). Each entry: id, severity "
                          "(error blocks, warning informs), fixable, description.")
 def list_checks(domain: str = "maya") -> Dict[str, Any]:
@@ -189,7 +214,7 @@ def list_checks(domain: str = "maya") -> Dict[str, Any]:
     raise ValueError("domain must be maya, kit or banner")
 
 
-@server.tool(description="Run ONE Maya check on a scene (.ma/.mb/.fbx, repo-relative or absolute) for an asset "
+@tool(description="Run ONE Maya check on a scene (.ma/.mb/.fbx, repo-relative or absolute) for an asset "
                          "class (conventions/mesh_budgets.yaml). Returns that check's result: passed, severity, "
                          "message, metrics, offenders (component names). Warm Maya worker: well under a second.")
 def run_check(file: str, asset_class: str, check_id: str) -> Dict[str, Any]:
@@ -201,7 +226,7 @@ def run_check(file: str, asset_class: str, check_id: str) -> Dict[str, Any]:
     return out
 
 
-@server.tool(description="Apply ONE safe fix to a scene and re-validate the fixed copy with every check. The "
+@tool(description="Apply ONE safe fix to a scene and re-validate the fixed copy with every check. The "
                          "source is never touched: the fixed scene is written as .ma under out/agent/calls/. "
                          "Returns what the fix did (or why it was skipped), the fixed file and the new report's "
                          "summary and failing checks.")
@@ -218,7 +243,7 @@ def apply_fix(file: str, asset_class: str, fix_id: str) -> Dict[str, Any]:
     return out
 
 
-@server.tool(description="Re-run banner checks on a rendered banner folder (out/banners/<kit>/<template>/"
+@tool(description="Re-run banner checks on a rendered banner folder (out/banners/<kit>/<template>/"
                          "<placement>/<locale>), all of them or only check_ids (comma-separated). Returns the "
                          "report's status and each result. Writes banner.report.json in that folder.")
 def banners_check(folder: str, check_ids: str = "") -> Dict[str, Any]:
@@ -226,6 +251,113 @@ def banners_check(folder: str, check_ids: str = "") -> Dict[str, Any]:
     out = commands.run(args, RULES.server.call_timeout_s)
     rep = _report((ROOT / folder if not Path(folder).is_absolute() else Path(folder)) / "banner.report.json")
     return dict(out.to_dict(), status=rep.get("status"), results=rep.get("results"))
+
+
+# --- coarse tools (step 5.5) -------------------------------------------------------------
+#
+# Everything here writes only under out/ (or nowhere). Tools that write into
+# the Unity project or overwrite kit art (build, generate, banners art) go
+# through the approval queue (step 5.6).
+
+def _inside(path: str, *roots: str) -> Path:
+    """A path the agent named, resolved and refused unless it lies under one of `roots` (repo-relative)."""
+    p = (ROOT / path) if not Path(path).is_absolute() else Path(path)
+    p = p.resolve()
+    for r in roots:
+        base = (ROOT / r).resolve()
+        if p == base or base in p.parents:
+            return p
+    raise ValueError("%s is outside %s: refused" % (path, ", ".join(roots)))
+
+
+@tool(description="Validate a Maya scene (.ma/.mb/.fbx) against its asset class: every check, optional "
+                         "safe fixes (fix=True: a fixed .ma copy, the source is never touched) and optional FBX "
+                         "export of a passing asset (export=True). Warm Maya worker. Returns exit code, the "
+                         "report's status and summary, the failing checks with their messages, and the files "
+                         "written (all under out/agent/calls/).")
+def validate(file: str, asset_class: str, fix: bool = False, export: bool = False) -> Dict[str, Any]:
+    d = _call_dir("validate")
+    args = [file, "--class", asset_class, "--out", str(d)]
+    if fix:
+        args += ["--fix", "--fixed-dir", str(d / "fixed")]
+    if export:
+        args += ["--export", str(d / "fbx")]
+    out = _maya(args)
+    rep = _report(d / (Path(file).name + ".report.json"))
+    out.update(status=rep.get("status"), summary=rep.get("summary"), tool_error=rep.get("tool_error"),
+               failing=[{"id": r["id"], "severity": r["severity"], "message": r["message"]}
+                        for r in rep.get("results") or [] if not r["passed"]],
+               fixes=[f for f in rep.get("fixes") or [] if f.get("applied")],
+               files=sorted(_rel(p) for p in d.rglob("*") if p.is_file()))
+    return out
+
+
+@tool(description="Check textures (PNG/TGA) against conventions/texture_rules.yaml in pure Python "
+                         "(name, size, power of two, alpha...): the same check ids Unity applies on import.")
+def texture_check(files: str, asset_class: str = "") -> Dict[str, Any]:
+    paths = [f.strip() for f in files.split(",") if f.strip()]
+    args = ["texture"] + paths + (["--class", asset_class] if asset_class else [])
+    return commands.run(args, RULES.server.call_timeout_s).to_dict()
+
+
+@tool(description="Image to a low-poly textured GLB (TRELLIS.2) from a passing concept run "
+                         "(out/gen/runs/concept_zimage-...), with the model checks; repair=True retries by seed "
+                         "per generation.yaml. A GPU job (several minutes on 8 GB).")
+def gen_model(concept_run: str, asset_class: str, seed: int = 56, repair: bool = True) -> Dict[str, Any]:
+    args = ["gen", "model", concept_run, "--class", asset_class, "--seed", str(seed)]
+    return _start("gen_model", args + (["--repair"] if repair else []), resource="gpu")
+
+
+@tool(description="A passing model run (out/gen/runs/model_trellis2-...) to a Maya scene + textures under "
+                         "out/gen/assets/<name>/ (SM_<name>.ma, T_<name>_D/N.png). A job (Maya). Then validate it.")
+def gen_ingest(model_run: str, asset_class: str, name: str) -> Dict[str, Any]:
+    return _start("gen_ingest", ["gen", "ingest", model_run, "--class", asset_class, "--name", name])
+
+
+@tool(description="Run the kit checks (slots, files, licences, colours, images, background) for a game "
+                         "kit against a template. Returns exit code and the kit report's results.")
+def banners_kit(kit: str, template: str, locale: str = "en") -> Dict[str, Any]:
+    out = commands.run(["banners", "kit", kit, "--template", template, "--locale", locale],
+                       RULES.server.call_timeout_s)
+    # out/banners/kits/<kit id>.<template id>.kit.report.json (banners/cli.py check_kit)
+    path = ROOT / "out" / "banners" / "kits" / ("%s.%s.kit.report.json" % (Path(kit).name, Path(template).stem))
+    rep = _report(path)
+    return dict(out.to_dict(), status=rep.get("status"), results=rep.get("results"),
+                report=_rel(path) if path.is_file() else None)
+
+
+@tool(description="Every game x placement x locale of a template, rendered through the repair loop, reused "
+                         "when nothing changed (input hash). games: comma-separated kit ids. A job; the summary "
+                         "is out/banners/batch/<template>.batch.json.")
+def banners_batch(template: str, games: str, repair: bool = True) -> Dict[str, Any]:
+    args = ["banners", "batch", "--template", template, "--games", games]
+    return _start("banners_batch", args + ([] if repair else ["--no-repair"]))
+
+
+@tool(description="Re-check every asset already in the Unity project (Assets/Art) from the files, with no "
+                         "import cache: read-only. A job (Unity boots in batchmode, ~20 s warm).")
+def unity_verify() -> Dict[str, Any]:
+    return _start("unity_verify", ["unity", "verify"])
+
+
+@tool(description="Read a JSON report or record the pipeline wrote (anything under out/: reports, repair "
+                         "records, batch summaries, provenance, job logs). Path repo-relative.")
+def read_report(path: str) -> Dict[str, Any]:
+    p = _inside(path, "out")
+    if p.stat().st_size > 2_000_000:
+        raise ValueError("%s is over 2 MB: read a narrower file" % path)
+    text = p.read_text(encoding="utf-8", errors="replace")
+    try:
+        return {"path": _rel(p), "json": json.loads(text)}
+    except ValueError:
+        return {"path": _rel(p), "text": text[-20000:]}
+
+
+@tool(description="Read a rules file from conventions/ (budgets, naming, textures, banner specs, repair "
+                         "policies, schemas). Never guess a number: read it here. name: e.g. mesh_budgets.yaml.")
+def read_conventions(name: str) -> Dict[str, Any]:
+    p = _inside("conventions/" + name, "conventions")
+    return {"name": p.name, "text": p.read_text(encoding="utf-8")}
 
 
 def main() -> None:
