@@ -76,7 +76,7 @@ so a check costs 0.04-0.12 s instead of a 4.6 s cold start.
 
 ## What I'd change for a studio
 
-- CI on a licensed runner for Maya and Unity tests (#16, #31).
+- CI on a licensed runner for Maya and Unity tests (#16).
 - Signed reports and signed approvals (#38, #65).
 - A persistent Unity worker and a cached `Library/` (#30).
 - Per-game style references (LoRA or image prompts) so 40 games don't

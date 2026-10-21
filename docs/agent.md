@@ -438,4 +438,4 @@ queue_run(item_id)                            → refused: an approval runs once
   banner frames). A turntable render of the generated mesh would let the
   model judge shape and texture fidelity (#66, #56).
 - **Run anywhere but this machine.** Windows, a local GPU, Maya 2023 and a
-  licensed Unity; no CI (#16, #31).
+  licensed Unity; no CI (#16).
