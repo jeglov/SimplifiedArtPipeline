@@ -59,9 +59,11 @@ before anything reaches the game.
 | anything that writes under `out/`: validate, fix into `out/`, generate concepts and models, render and check banners, `unity verify` (read-only) | `build` and `generate` (they import into `unity/Assets`), kit art (overwrites a game's files), golden re-records |
 
 The queue stores the exact command and its sha256; an approval runs once and
-only for that command. There is no approve tool. Claude Code permission
-rules deny file edits under `out/agent/queue/`; a shell could still write
-there, so team use needs signed decisions (backlog #65, #38).
+only for that command. There is no approve tool, and `artpipe queue approve`
+needs a person at a real console who types the id back, so the agent's own
+shell is refused. Claude Code permission rules deny file edits under
+`out/agent/queue/`; a shell could still write there, so team use needs
+signed decisions (backlog #65, #38).
 
 ## Long work
 

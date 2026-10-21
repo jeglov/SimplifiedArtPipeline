@@ -82,7 +82,7 @@ Details and every probed behaviour: [docs/banners.md](docs/banners.md).
 .\artpipe.cmd agent setup        # once: Python 3.12 venv with the hash-locked MCP SDK
 # open the repo in Claude Code: .mcp.json registers `artpipe agent serve`; /mcp lists 29 tools
 .\artpipe.cmd queue list          # what the agent asked to do, and what it handed over
-.\artpipe.cmd queue approve approval-1a2b3c4d5e --note "ok"
+.\artpipe.cmd queue approve approval-1a2b3c4d5e --note "ok"   # at a console: you type the id back
 ```
 
 1. **artpipe is an MCP server; the client is the agent.** Each tool runs an

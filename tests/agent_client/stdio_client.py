@@ -8,13 +8,13 @@ the tool's result. Run by tests/test_agent_server.py under the agent venv
 """
 import asyncio
 import json
-import os
 import sys
 import time
 from pathlib import Path
 
 from mcp import Client
-from mcp.client.stdio import StdioServerParameters
+
+from spawn import server_params
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -33,8 +33,7 @@ def _content(result):
 
 
 async def main(tool, args):
-    params = StdioServerParameters(command=os.environ.get("COMSPEC", "cmd.exe"),
-                                   args=["/d", "/c", str(ROOT / "artpipe.cmd"), "agent", "serve"], cwd=str(ROOT))
+    params = server_params()
     started = time.time()
     async with Client(params, read_timeout_seconds=600) as client:
         connected = time.time() - started

@@ -8,20 +8,19 @@ Prints JSON {start, statuses (states seen), result}. Not collected by pytest.
 """
 import asyncio
 import json
-import os
 import sys
 import time
 from pathlib import Path
 
 from mcp import Client
-from mcp.client.stdio import StdioServerParameters
+
+from spawn import server_params
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def params():
-    return StdioServerParameters(command=os.environ.get("COMSPEC", "cmd.exe"),
-                                 args=["/d", "/c", str(ROOT / "artpipe.cmd"), "agent", "serve"], cwd=str(ROOT))
+    return server_params()
 
 
 def structured(result):

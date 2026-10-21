@@ -48,7 +48,10 @@ def test_the_pins_agree_across_files():
     # artpipe.cmd starts the server from the venv folder agent.yaml names.
     assert "\\%s\\Scripts\\python.exe" % RULES.venv in (ROOT / "artpipe.cmd").read_text(encoding="ascii")
     mcp = json.loads((ROOT / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"][RULES.server.name]
-    assert mcp["args"][-2:] == ["agent", "serve"] and "artpipe.cmd" in mcp["args"]
+    assert mcp["args"][-2:] == ["agent", "serve"] and mcp["args"][-3].endswith("artpipe.cmd")
+    # Claude Code sets NoDefaultCurrentDirectoryInExePath=1: cmd.exe then won't
+    # find a bare "artpipe.cmd" in the current folder, and the server never starts.
+    assert mcp["args"][-3] == ".\\artpipe.cmd" or Path(mcp["args"][-3]).is_absolute()
 
 
 @pytest.mark.parametrize("bad", ["a & del x", "a | b", "x > y", "x < y", "50%", "a^b", 'say "hi"', "a\nb"])

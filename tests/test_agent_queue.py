@@ -2,16 +2,20 @@
 round trip over MCP: request -> refused while pending -> a human approves -> the agent runs it."""
 from __future__ import annotations
 
+import functools
 import json
 import shutil
 import subprocess
+import sys
 import time
+import types
 from pathlib import Path
 
 import jsonschema
 import pytest
 
 from agent import cli as agent_cli
+from agent import queue_cli
 from agent.core import commands, jobs, queue
 from agent.core import rules as ar
 from validate.core.conventions import DEFAULT_DIR
@@ -94,6 +98,68 @@ def test_handover_once_per_job_and_resolve(tmp_path):
         queue.resolve(queue.request("golden_rerecord", {}, "r", tmp_path)["id"], "x", queue=tmp_path)
 
 
+# --- the human side: `artpipe queue approve|resolve` needs a person at a console ---------
+
+@pytest.fixture
+def cli_queue(tmp_path, monkeypatch):
+    """queue_cli against a queue in tmp_path (the queue functions bind their folder as a default)."""
+    bound = {name: functools.partial(getattr(queue, name), queue=tmp_path)
+             for name in ("read", "decide", "resolve", "list_items")}
+    monkeypatch.setattr(queue_cli, "queue", types.SimpleNamespace(**bound))
+    return tmp_path
+
+
+def _cli(argv, console, typed=None):
+    def ask(prompt):
+        if typed is None:
+            raise EOFError
+        return typed
+    return queue_cli.main(argv, console=lambda: console, ask=ask)
+
+
+@pytest.mark.parametrize("console,typed", [(False, None), (True, None), (True, ""), (True, "approval-wrong")])
+def test_approve_without_a_person_who_types_the_id_changes_nothing(cli_queue, capsys, console, typed):
+    item = queue.request("banners_art_logo", {"kit": "spotcap_grove"}, "font changed", cli_queue)
+    if typed == "approval-wrong":
+        typed = item["id"][:-1]                     # one character short: still refused
+    assert _cli(["approve", item["id"], "--note", "ok"], console, typed) == 2
+    assert queue.read(item["id"], cli_queue)["status"] == "pending"
+    err = capsys.readouterr().err
+    assert ("interactive console" in err) if not console else ("not confirmed" in err)
+
+
+def test_approve_at_a_console_with_the_id_typed_back(cli_queue, capsys):
+    item = queue.request("banners_art_logo", {"kit": "spotcap_grove"}, "font changed", cli_queue)
+    assert _cli(["approve", item["id"], "--note", "ok"], True, "  %s \n" % item["id"]) == 0
+    assert queue.read(item["id"], cli_queue)["status"] == "approved"
+    out = capsys.readouterr().out
+    assert "runs: artpipe banners art logo" in out and "approved" in out
+
+
+def test_resolve_needs_a_console_and_reject_does_not(cli_queue):
+    job = {"id": "banners-render-x", "tool": "banners_render", "args": ["banners", "render", "k"]}
+    hand = queue.handover(job, "error banner.duration: 1.0 s", cli_queue)
+    assert _cli(["resolve", hand["id"], "--note", "seen"], False) == 2
+    assert queue.read(hand["id"], cli_queue)["status"] != "resolved"
+    assert _cli(["resolve", hand["id"], "--note", "seen"], True, hand["id"]) == 0
+    assert queue.read(hand["id"], cli_queue)["status"] == "resolved"
+    # Saying no is always safe: an agent may withdraw its own request.
+    item = queue.request("banners_art_logo", {"kit": "spotcap_grove"}, "font changed", cli_queue)
+    assert _cli(["reject", item["id"]], False) == 0
+    assert queue.read(item["id"], cli_queue)["status"] == "rejected"
+
+
+@pytest.mark.parametrize("stdin", [subprocess.DEVNULL, subprocess.PIPE])
+def test_nul_and_pipes_are_not_a_console(stdin):
+    # Probed: Python's isatty() says True for NUL on Windows (the agent's PowerShell
+    # and the MCP command runner both give mayapy a NUL stdin), so isatty can't be the check.
+    code = "import sys; from agent.queue_cli import at_console; print(sys.stdin.isatty(), at_console())"
+    feed = {"input": ""} if stdin == subprocess.PIPE else {"stdin": stdin}
+    out = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT), stdout=subprocess.PIPE,
+                         universal_newlines=True, timeout=60, **feed)
+    assert out.stdout.split()[-1] == "False"
+
+
 def test_ids_are_checked(tmp_path):
     for bad in ("../x", "a/b", "", "C:x"):
         with pytest.raises(ValueError):
@@ -139,9 +205,12 @@ def test_request_approve_run_over_mcp(tmp_path):
     assert req["result"]["status"] == "pending" and early["is_error"]
     (still,) = calls(["queue_run", {"item_id": item_id}])
     assert still["is_error"] and "a human must approve it first" in still["text"]
-    # The human approves on the command line: there is no MCP tool for it.
+    # The agent's own shell can't approve: the CLI wants a person at a console.
     out = commands.run(["queue", "approve", item_id, "--note", "fine"], 60)
-    assert out.exit_code == 0 and "approved" in out.stdout
+    assert out.exit_code == 2 and "interactive console" in out.stderr
+    assert queue.read(item_id)["status"] == "pending"
+    # The human approves (what `artpipe queue approve` does once they type the id back).
+    queue.decide(item_id, True, "fine")
     (run,) = calls(["queue_run", {"item_id": item_id}])
     st = wait_job(run["result"]["job_id"])
     assert st["state"] == "done" and st["exit_code"] == 0 and (kit / "logo.png").is_file()

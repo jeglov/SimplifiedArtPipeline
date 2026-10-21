@@ -13,7 +13,7 @@ deterministic and never calls an LLM. Scope agreed on 2026-10-20 (see
 ```
 
 `.mcp.json` at the repo root registers it for Claude Code
-(`cmd /d /c artpipe.cmd agent serve`, stdio). Open the repo in Claude Code
+(`cmd /d /c .\artpipe.cmd agent serve`, stdio: the `.\` matters, see the probes below). Open the repo in Claude Code
 and run `/mcp` to see it.
 
 **A thin front end.** The server (`agent/server.py`) runs each tool as an
@@ -40,6 +40,7 @@ Probed while building it:
 | `mcp` 2.x API | `FastMCP` is gone (renamed `MCPServer`, `mcp.server.mcpserver`), and models are snake_case (`input_schema`, `is_error`, `structured_content`): v1 examples don't run |
 | Spawning the server with the SDK's stdio client | **the server gets a minimal environment**: the SDK passes 12 variables on Windows (APPDATA, HOMEDRIVE, HOMEPATH, LOCALAPPDATA, PATH, PATHEXT, PROCESSOR_ARCHITECTURE, SYSTEMDRIVE, SYSTEMROOT, TEMP, USERNAME, USERPROFILE). No `ProgramFiles`, so `artpipe.cmd` couldn't find mayapy ("mayapy not found") and no `COMSPEC`. `artpipe.cmd` now falls back to the defaults. Your own `MAYAPY`, `UNITY` or `ARTPIPE_TOOLS` must go in the `env` of `.mcp.json`: they won't be inherited |
 | `subprocess.run(timeout=3)` on an artpipe command that sleeps 25 s | **returned after 25 s**, and mayapy kept running: it kills `cmd.exe`, then waits for the pipes, which the mayapy child still holds. The runner now kills the whole tree (`taskkill /T /F`): 3.2 s, no orphan |
+| `cmd /c artpipe.cmd` with `NoDefaultCurrentDirectoryInExePath=1` (Claude Code sets it) | **cmd.exe no longer looks in the current folder**: "'artpipe.cmd' is not recognized", the server never starts and Claude Code shows `CONNECTION_CLOSED`. `.\artpipe.cmd` works with and without the variable. The server tests now spawn the command `.mcp.json` names, with the variable set (`tests/agent_client/spawn.py`); before, they used an absolute path and couldn't see this |
 | A real call over stdio (`artpipe_info`) | connect ~1.1 s, call ~0.35 s (mayapy without Maya loaded is fast) |
 
 **Arguments are data, never syntax.** Every tool argument reaches
@@ -245,7 +246,17 @@ decides on the command line:
 .\artpipe.cmd queue list
 .\artpipe.cmd queue show approval-1a2b3c4d5e
 .\artpipe.cmd queue approve approval-1a2b3c4d5e --note "ok, first coin of the batch"
+# approval-1a2b3c4d5e   pending   banners_art_logo   the logo font changed
+#   runs: artpipe banners art logo spotcap_grove
+# Type the id to approve it: approval-1a2b3c4d5e
+# artpipe queue: approved approval-1a2b3c4d5e (banners_art_logo): banners art logo spotcap_grove
 ```
+
+`approve` and `resolve` need a person at a console who types the id back;
+`reject` doesn't (withdrawing a request is always safe). An agent's shell
+can run this CLI too, so the check is what makes "a human approves" true:
+its stdin is a pipe or `NUL`, never a console, and the CLI refuses with
+exit 2 ("needs a person at an interactive console").
 
 Then the agent calls `queue_run(id)`, which starts the job only if the item
 is approved, hasn't run yet, and its command is unchanged (the stored
@@ -269,13 +280,24 @@ write under `out/agent/queue/` and `.claude/` (so the rule can't be edited
 away); probed: a Write into the queue folder is refused. A shell command
 could still write there, so #65 stays open for signed decisions.
 
+The easier route was the CLI itself: until the console check, an agent with
+a shell could run `artpipe queue approve` on its own request (found in the
+2026-10-21 review). Probed: Python's `isatty()` is **True** for a `NUL`
+stdin on Windows, which is what Claude Code's PowerShell tool and the MCP
+command runner give mayapy, so `isatty()` would have let the agent through.
+The CLI asks Windows instead (`GetConsoleMode` on stdin, False for `NUL`,
+pipes and files). Refused from the agent's Bash and PowerShell, with and
+without the id piped in. This stops an agent approving by habit or by
+accident; it is not a signature: a script that drives a real console
+window can still type (#65, #38).
+
 Tested (`tests/test_agent_queue.py`): the gated list in conventions equals
 the queue's actions; a request does nothing; bad requests are refused (an
 unknown action, a missing parameter, no reason, cmd.exe syntax in a prompt);
-approve-then-run once; a rejected item never runs; a command or parameters
+approve-then-run once; `approve` and `resolve` refused without a console, with no id, an empty id or a wrong one, and `NUL` or a pipe never counts as a console (`reject` works anywhere); a rejected item never runs; a command or parameters
 edited after approval are refused; hand-overs are one per job and resolve;
 ids are checked; and over MCP the full round trip (request, `queue_run`
-refused while pending, `artpipe queue approve` by the human, `queue_run`
+refused while pending, `artpipe queue approve` refused from the agent's command runner, the human's approval, `queue_run`
 regenerates the logo of a kit copy, a second run refused), no
 approve-like tool exists, and a job that exits 1 lands in the queue.
 

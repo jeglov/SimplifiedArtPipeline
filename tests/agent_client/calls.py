@@ -6,19 +6,18 @@ Prints a JSON list: per call {tool, is_error, result (structured), text}. Not co
 """
 import asyncio
 import json
-import os
 import sys
 from pathlib import Path
 
 from mcp import Client
-from mcp.client.stdio import StdioServerParameters
+
+from spawn import server_params
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 async def main(calls):
-    params = StdioServerParameters(command=os.environ.get("COMSPEC", "cmd.exe"),
-                                   args=["/d", "/c", str(ROOT / "artpipe.cmd"), "agent", "serve"], cwd=str(ROOT))
+    params = server_params()
     out = []
     async with Client(params, read_timeout_seconds=900) as client:
         for tool, args in calls:
