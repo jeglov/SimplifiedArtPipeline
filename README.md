@@ -1,37 +1,78 @@
 # artpipe
 
-An agent-runnable art pipeline for live mobile games. Every step runs
-headless and returns machine-readable JSON, so an AI agent can do the whole
-loop with no human in it: generate an asset, validate it, fix what is safe
-to fix, and import it into Unity.
+**An art pipeline for mobile games that an AI agent can run on its own.**
 
-## What it does today
+artpipe automates the repetitive work in a mobile studio's asset pipeline.
+It creates a 3D asset from a text prompt, checks it against the studio's
+rules, fixes what is safe to fix, and imports it into Unity as a
+ready-to-use prefab. It also turns one ad template into checked video ads
+for many games. Every step runs without a UI and reports its result as
+JSON, so an AI agent (Claude Code today, an in-house agent later) can drive
+the whole loop. A person approves only the steps that touch the actual game.
+
+> **Status:** portfolio project, limited to use in an actual production enviroment. Technical overview:
+> [docs/architecture.md](docs/architecture.md).
+
+## What it solves
+
+| Problem | What artpipe does |
+|---|---|
+| Exports arrive with small mistakes: default names, wrong scale, leftover history, bad pivot | Checks every asset against written rules (18 checks), applies the safe fixes, and reports what a person must fix |
+| Budgets break unnoticed: triangles, GPU vertices, texture size and format | Measures the asset after the Unity import, where UV seams have already split vertices |
+| Every game imports assets slightly differently | One Unity import gate: an asset gets in only with a passing report for its exact bytes, with its class's import settings |
+| Props and pickups for content updates cost artist time | Prompt to prefab in one command, through the same checks as hand-made art. Local models with commercial-use licences only |
+| UA needs many videos: per game, placement and language | One template plus a kit per game gives a 9:16 video, checked against Meta, TikTok, Unity Ads and AppLovin specs and repaired automatically |
+| An agent shouldn't write into a live game unsupervised | An MCP server with safe tools. Anything that writes into the game waits in an approval queue |
+
+## Limitations
+
+A working proof on one machine, not yet a tool another studio can clone and run.
+
+- **One machine, one toolchain.** Tested on Windows 11, Maya 2023, Unity 6000.5 and one pinned ComfyUI only. Never set up on a clean machine.
+- **Manual setup.** Several setup commands, no single setup check. Generation needs an NVIDIA GPU with 8 GB+ VRAM and ~21 GB of models.
+- **Simple static props only.** Classes `pickup` and `prop_small`; no characters, rigs or animation. About half of image-to-3D attempts fail first try; retries only change the seed.
+- **No likeness check.** A generated model can pass every check and still lose the concept's key detail. The agent reviews 2D images, never the 3D model.
+- **Silent 9:16 video ads only.** No playables, audio or other formats. Demo: one made-up game, English.
+- **Budgets are defaults**, not profiled on a low-end Android device.
+- **No CI.** Maya and Unity need licences a hosted runner doesn't have.
+- **Local trust.** Reports and approvals aren't signed. An agent can't approve its own work through its tools, but someone with shell access could.
+
+Every gap, with a plan: [docs/backlog.md](docs/backlog.md).
+
+## How it works
+
+### Maya scene to Unity prefab
 
 ```powershell
 .\artpipe.cmd build out\fixtures\SM_Messy.ma --class prop_small --texture T_Messy_D.png
 # artpipe build: PASS out/build/SM_Messy/build.report.json -> Assets/Art/prop_small/SM_Messy.prefab
 ```
+# Example asset:
+`SM_Messy` has six problems: default names, a wrong UV set name, live
+history, unfrozen transforms, an off-centre pivot, a metre scene. In ~20 s:
 
-`SM_Messy` is a rushed export with six problems: default names, a foreign UV
-set name, live history, an unfrozen and off-centre transform, a metre scene.
-In about 20 seconds:
+1. **Maya (headless)** checks it against its class rules, applies the safe fixes, and re-checks the fixed copy. Holes, n-gons and over-budget meshes are never auto-fixed: the build stops and the report says where.
+2. **FBX export** with fixed, verified settings. Same scene, same bytes. The FBX is checked again.
+3. **Unity (batchmode)** accepts the FBX only with a passing report for those bytes, imports it with the class settings, measures what the GPU gets, compresses the texture to ASTC and creates the prefab.
+4. **One build report** links every stage by path and sha256. Exit codes everywhere: `0` pass, `1` fix the asset, `2` the tool broke.
 
-1. **Maya** (headless `mayapy`) runs 18 checks against the rules for its
-   class, applies the 6 safe fixes, saves a fixed copy, and validates it again
-   from scratch. Holes, n-gons and over-budget meshes are never "fixed":
-   the build stops and the report says where they are.
-2. It **exports a canonical FBX** with explicit, verified exporter settings.
-   Same scene, same bytes: no timestamps, no absolute paths, stable object
-   IDs. Then it validates that FBX too and writes its report next to it.
-3. **Unity** (batchmode) gates the FBX: it needs a passing report that
-   describes these exact bytes. It then imports it with the class's import
-   settings, measures what the GPU really gets (vertices after seam splits,
-   LOD vertex ratios, submeshes), imports the texture as real ASTC, and
-   creates a Prefab Variant.
-4. One **build report** links every stage by path and sha256. Every command
-   returns `0` pass / `1` asset failed / `2` tool error.
+### Prompt to prefab
 
-### UA creatives (Phase 4)
+```powershell
+.\artpipe.cmd generate "a golden coin with a star emblem" --class pickup --style casual_toon --name Coin
+# artpipe generate: PASS out/build/SM_Coin/build.report.json -> Assets/Art/pickup/SM_Coin.prefab
+```
+
+1. **Concept image** (Z-Image-Turbo) in the game's style, cut out with a mask, checked for 3D use: one object, plain background, margin.
+2. **3D model** (TRELLIS.2): textured, low-poly, within budget; checked for closed shape, clean UVs, no hidden inner parts.
+3. **Retry** on a failed check with a new seed, at most 3 attempts, all recorded.
+4. **Same build** as a hand-made asset. No shortcut.
+
+The report records the prompt, seeds, model licences and checksums, GPU and
+software versions. The AI model is the only nondeterministic step.
+Details: [docs/generation.md](docs/generation.md).
+
+### One template to many video ads
 
 ```powershell
 .\artpipe.cmd banners setup                                          # once: pinned ffmpeg + Chromium + Playwright
@@ -41,30 +82,19 @@ In about 20 seconds:
 
 ![Spotcap Grove, hero_endcard, 9:16: frames at 0, 1, 3, 5, 6 and 8 s](docs/images/spotcap_grove_hero_endcard_sheet.png)
 
-*Spotcap Grove is a made-up game. The hero is a Phase 3 concept cut out with its
-mask, the background one Z-Image image, the logo a wordmark set in an OFL font.*
+*Spotcap Grove is a made-up game. Hero: a generated concept, cut out.
+Background: one generated image. Logo and text: open-licence fonts. AI never
+makes text or logos.*
 
-1. One **template** (layers, keyframes, slots) and one **kit** per game
-   (palette, fonts, art, strings), each kit asset with a licence record and
-   a provenance sidecar. Kit checks run first.
-2. **Headless Chromium, time stepped frame by frame** (no screen recording),
-   then a pinned **x264** encode: byte-identical re-renders on this machine.
-3. **17 banner checks** against the strictest of Meta, TikTok, Unity Ads and
-   AppLovin (size, codec, constant frame rate, 6-60 s, 100 MB, the 516 kbps
-   floor, safe zone) and house rules (text fit, font fallback, readable
-   sizes, WCAG contrast on the real pixels behind the text, first frame,
-   end card, logo).
-4. **Repair**: shrink text (found with 3 s layout passes, not renders),
-   recolour from the palette, or hand over with the reason. Here the headline
-   wrapped to 3 lines; it was shrunk to x0.792 and passed on the second render.
-5. **Batch**: every game x placement x locale, reused when nothing changed
-   (an input hash over the files, the rules, the tools and the code: 322 s
-   rendered, 2 s reused), a summary, a contact sheet, and a warning when two
-   games look alike.
+1. **Template + kit.** The template holds layers, keyframes and slots; each game's kit fills them (palette, fonts, art, text). Every kit file has a licence and provenance record. Kit checks run first.
+2. **Render** frame by frame in headless Chromium, then a pinned x264 encode. Byte-identical re-renders on this machine.
+3. **17 checks** on the decoded video. Network specs: size, codec, frame rate, length, file size, bitrate, safe zone. House rules: text fit, font fallback, text size, contrast on the real pixels, first frame, end card, logo.
+4. **Repair**: shrink text, recolour from the palette, or hand over with the reason. Here the headline wrapped to 3 lines; shrunk to 79 %, it passed on the second render.
+5. **Batch**: game × placement × language, unchanged inputs reused (322 s rendered, 2 s reused), with a summary, contact sheet and a look-alike warning.
 
-Details and every probed behaviour: [docs/banners.md](docs/banners.md).
+Details: [docs/banners.md](docs/banners.md).
 
-### The agent layer (Phase 5)
+### Agent layer
 
 ```powershell
 .\artpipe.cmd agent setup        # once: Python 3.12 venv with the hash-locked MCP SDK
@@ -73,137 +103,140 @@ Details and every probed behaviour: [docs/banners.md](docs/banners.md).
 .\artpipe.cmd queue approve approval-1a2b3c4d5e --note "ok"   # at a console: you type the id back
 ```
 
-1. **artpipe is an MCP server; the client is the agent.** Each tool runs an
-   artpipe command and returns its exit code, meaning and files. The
-   pipeline never calls an LLM.
-2. **Two levels of tools**: fine (list checks, run one check, apply one fix,
-   in a persistent Maya worker: 0.04-0.12 s instead of a 4.6 s cold start)
-   and coarse (validate, generate stages, banners, `unity verify`).
-3. **Jobs** for long work, with live ComfyUI progress, a GPU queue (first
-   come first served) and a shared ComfyUI server.
-4. **An approval queue**: anything that writes outside `out/` (a Unity
-   import, kit art, goldens) is a request a human approves once, for that
-   exact command. Failed jobs land there as hand-overs with their reason.
-5. **Judgement tools** return images (concept and mask, banner contact
-   sheet) with the questions no check answers; the agent records a verdict
-   and may reword a concept at most twice.
+1. **artpipe is the MCP server; the client is the agent.** Each tool runs one artpipe command. The pipeline never calls an LLM.
+2. **Fine and coarse tools.** Fine: list checks, run one check, apply one fix, in a Maya process that stays open (~0.1 s instead of a 4.6 s start). Coarse: validate, generate, render ads, verify Unity.
+3. **Jobs** for long work, with progress. GPU jobs run one at a time.
+4. **Approval queue.** Anything that writes outside `out/` (Unity import, kit art, goldens) waits for a person to approve that exact command. Failed jobs land there with their reason.
+5. **Review tools** show the agent's model images and metrics for what checks can't judge. It records a verdict and may reword a concept prompt at most twice.
 
-Guide and example sessions: [docs/agent.md](docs/agent.md); tool reference
-(generated): [docs/agent_tools.md](docs/agent_tools.md).
+Guide: [docs/agent.md](docs/agent.md). Tool reference (generated): [docs/agent_tools.md](docs/agent_tools.md).
 
-## The rules
+## Rules
 
-All rules live in [`conventions/`](conventions/), not in code. C# reads them
-from a generated, hash-checked `conventions.lock.json`, and never holds a
-budget number.
+All rules are data in [`conventions/`](conventions/), never numbers in code.
+Unity reads them from a generated, checksummed `conventions.lock.json`; a
+stale lock blocks the import.
 
-| File | Holds |
+| File | Defines |
 |---|---|
-| [`mesh_budgets.yaml`](conventions/mesh_budgets.yaml) | 8 asset classes for low/mid Android: triangle and GPU-vertex budgets, LODs, materials, size, pivot, UVs, severity overrides |
-| [`naming.schema.json`](conventions/naming.schema.json) | the naming grammar `<SM\|SK>_<AssetName>[_Variant][_LODn]`, with valid and invalid examples that Python and C# tests both enforce |
-| [`texture_rules.yaml`](conventions/texture_rules.yaml) | map types (`_D _N _MS _AO _E`): color space, alpha rules, ASTC block per platform, max size per class |
+| [`mesh_budgets.yaml`](conventions/mesh_budgets.yaml) | 8 asset classes for low/mid Android: triangle and GPU vertex budgets, LODs, materials, size, pivot, UVs |
+| [`naming.schema.json`](conventions/naming.schema.json) | naming `<SM\|SK>_<AssetName>[_Variant][_LODn]`, with examples both Python and C# tests use |
+| [`texture_rules.yaml`](conventions/texture_rules.yaml) | map types (`_D _N _MS _AO _E`): colour space, alpha, compression per platform, max size per class |
 | [`fbx_export.yaml`](conventions/fbx_export.yaml) | every FBX exporter setting, versioned |
-| [`unity_import.yaml`](conventions/unity_import.yaml) | managed folder, shared materials, LOD switch heights, ModelImporter settings per class |
-| [`generation.yaml`](conventions/generation.yaml), [`gen_styles.yaml`](conventions/gen_styles.yaml) | the pinned ComfyUI and models (sha256, licence), concept and model checks, the repair policy, the art styles |
-| [`banners.yaml`](conventions/banners.yaml) | the UA placements (every number cited to a network's spec page), the pinned renderer tools, the encoder, allowed licences, the house rules of the banner checks, the repair policy |
-| `*.schema.json` | the report contracts: Maya, Unity, build, generation and banner reports and records |
+| [`unity_import.yaml`](conventions/unity_import.yaml) | Unity folders, shared materials, LOD distances, import settings per class |
+| [`generation.yaml`](conventions/generation.yaml), [`gen_styles.yaml`](conventions/gen_styles.yaml) | pinned AI models (sha256, licence), concept and model checks, retry policy, art styles |
+| [`banners.yaml`](conventions/banners.yaml) | ad placements (each number cited), pinned render tools, encoder, allowed licences, house rules, repair policy |
+| `*.schema.json` | report formats |
 
-* **[docs/conventions.md](docs/conventions.md)** explains every Maya-side
-  rule and why it exists.
-* **[docs/unity_import.md](docs/unity_import.md)** covers the Unity side:
-  folder layout, gate, import settings, GPU budgets, textures, every check id,
-  and the Unity behaviours the design relies on.
+Rule docs: [docs/conventions.md](docs/conventions.md) (Maya side),
+[docs/unity_import.md](docs/unity_import.md) (Unity side). Their tables are
+generated from these files; tests fail if they drift.
 
-Tables in both docs are generated from these files, and tests fail if the docs drift.
+## Getting started
 
-## Quick start
-
-Requirements: Windows, Maya 2023+ (`mayapy`, Python 3.9), Unity 6000.5 with
-Android Build Support; for generation, Comfy Desktop (the pipeline runs its
-own pinned server); for banners, Node.js 20+ (`banners setup` fetches the
-rest). The code stays Python 3.9-compatible.
+**Requires:** Windows, Maya 2023+ (`mayapy`, Python 3.9), Unity 6000.5 with
+Android Build Support. Generation: Comfy Desktop, NVIDIA GPU with 8 GB+
+VRAM. Video ads: Node.js 20+.
 
 ```powershell
 .\artpipe.cmd py -m pip install --user -r requirements-maya.txt   # once: pyyaml, pytest, jsonschema
 .\artpipe.cmd unity setup                                           # once: URP, Linear, text assets
-.\artpipe.cmd fixtures                                              # build 45 test scenes into out\fixtures
-.\artpipe.cmd build out\fixtures\SM_Messy.ma --class prop_small     # Maya -> Unity prefab
-.\artpipe.cmd banners setup                                          # once: pinned ffmpeg + Chromium for the banners
+.\artpipe.cmd fixtures                                              # builds 45 broken test scenes into out\fixtures
+.\artpipe.cmd build out\fixtures\SM_Messy.ma --class prop_small     # first Maya -> Unity build
+.\artpipe.cmd banners setup                                          # once: pinned ffmpeg + Chromium for the ads
 .\artpipe.cmd test                                                  # ~1100 tests, ~18 min (close the Unity Editor and ComfyUI first)
 .\artpipe.cmd test -m "not maya and not unity and not comfy and not render"   # pure Python only, ~20 s
 ```
 
-`artpipe.cmd` finds `mayapy` (`%MAYAPY%` or the newest Maya). The Unity
-runner uses the exact version pinned in `unity/ProjectSettings` (or `%UNITY%`).
+`artpipe.cmd` finds Maya (or `%MAYAPY%`) and the Unity version pinned in
+`unity/ProjectSettings` (or `%UNITY%`).
+
+## Commands
+
+### 3D assets
 
 | Command | Does |
 |---|---|
-| `artpipe generate "SUBJECT" --class C --style S --name N` | prompt to prefab: concept image, image-to-3D (both with the repair loop), ingest, then `artpipe build`; the build report carries the generation provenance (attempts, seeds, manifests, model licences, GPU) |
-| `artpipe build SCENE --class C [--texture T ...]` | the whole chain: Maya validate/fix/export, then Unity import (creates the shared `M_<Name>.mat` from `T_<Name>_D/N` when missing); one build report |
-| `artpipe validate FILE... --class C [--fix] [--export DIR]` | Maya stage only: validate (and fix) `.ma` / `.mb` / `.fbx`; `--export` writes each passing asset as canonical FBX plus its linked report |
-| `artpipe unity import --class C FILE...` | Unity stage only: gate each FBX before it enters `Assets/Art/C/`, import with the class rules, measure, create the Prefab Variant |
-| `artpipe unity verify` | re-check every asset under `Assets/Art` from the files, with no import cache |
-| `artpipe unity setup\|test` | one-time project setup; Unity EditMode tests |
-| `artpipe gen run WORKFLOW [--param NAME VALUE ...]` | generation stage: run a workflow from `gen/workflows/` on the pinned, headless ComfyUI; outputs plus a provenance manifest in `out/gen/runs/<run_id>/` |
-| `artpipe gen concept "SUBJECT" --class C --style S [--seed N] [--repair]` | concept image (Z-Image-Turbo, prompt from the game's style in `conventions/gen_styles.yaml`) plus its foreground mask, checked for image-to-3D: plain background, coverage, margin, one object |
-| `artpipe gen model CONCEPT_RUN --class C [--seed N] [--repair]` | image to textured low-poly GLB at the class budgets (TRELLIS.2), checked: budget, closed, manifold, UVs, UV overlap, hidden inner shells. `--repair` (also on `concept`): retry failed checks with the next seed per the policy in `generation.yaml`, at most 3 attempts, every attempt in `out/gen/repairs/` |
-| `artpipe gen ingest MODEL_RUN --class C --name N` | GLB to a Maya scene (`SM_N.ma` + `T_N_D/N.png`), sized and placed for the class; then `artpipe build` as for any asset |
-| `artpipe texture FILE... [--class C]` | the Unity texture rules in Python, before a texture reaches Unity (same check ids) |
-| `artpipe gen server start\|stop\|status` | the pipeline's own ComfyUI server (keep it up for a batch: startup is ~15 s) |
-| `artpipe banners setup\|status` | install and verify the pinned ffmpeg, Chromium and Playwright |
-| `artpipe banners kit KIT --template T` | the kit checks (slots, files, licences, colours, images, background) |
-| `artpipe banners art hero\|background\|logo KIT ...` | kit art with provenance: the hero cut out of a Phase 3 concept, one Z-Image background (`--repair` retries the seed while the hero would blend in), the logo rendered from `logo.html` |
-| `artpipe banners render KIT --template T [--repair]` | one banner: MP4, layout record, contact sheet, provenance, the 17 checks; `--repair` fixes and re-renders |
-| `artpipe banners check FOLDER` | re-run the banner checks on a rendered banner |
-| `artpipe banners batch --template T --games G1,G2` | every game x placement x locale, reused by input hash; summary + contact sheet in `out/banners/batch/` |
-| `artpipe agent setup\|status\|serve\|docs [--check]` | the MCP server: build its venv, show it, run it over stdio (Claude Code does this via `.mcp.json`), regenerate `docs/agent_tools.md` |
-| `artpipe queue list\|show\|approve\|reject\|resolve` | the human side of the approval queue |
-| `artpipe conventions --dump\|--check` | write / verify `conventions/conventions.lock.json` |
-| `artpipe docs [--check]` | regenerate the tables in the docs |
-| `artpipe fixtures [DIR]` / `artpipe unity-fixtures` | build the broken test scenes / the golden FBX + reports the Unity tests import |
-| `artpipe test [-m "not maya and not unity and not comfy and not render"]` | the suite (Python, Maya, real Unity, ComfyUI and banner renders) |
+| `artpipe build SCENE --class C [--texture T ...]` | Maya check, fix, export, then Unity import (creates `M_<Name>.mat` from `T_<Name>_D/N` if missing). One build report |
+| `artpipe validate FILE... --class C [--fix] [--export DIR]` | Maya only: check (and fix) `.ma`, `.mb`, `.fbx`; `--export` writes clean FBX + report |
+| `artpipe texture FILE... [--class C]` | Unity texture rules, checked in Python before Unity |
+| `artpipe unity import --class C FILE...` | Unity only: gate, import with class rules, measure, create the prefab |
+| `artpipe unity verify` | Re-check every asset in `Assets/Art` from the files |
+| `artpipe unity setup\|test` | One-time project setup; Unity tests |
+
+### AI generation
+
+| Command | Does |
+|---|---|
+| `artpipe generate "SUBJECT" --class C --style S --name N` | Prompt to prefab, with provenance in the build report |
+| `artpipe gen concept "SUBJECT" --class C --style S [--seed N] [--repair]` | Concept image + mask, checked for 3D use |
+| `artpipe gen model CONCEPT_RUN --class C [--seed N] [--repair]` | Image to low-poly GLB within budget, checked. `--repair`: up to 3 seeds, recorded in `out/gen/repairs/` |
+| `artpipe gen ingest MODEL_RUN --class C --name N` | GLB to a Maya scene, sized for the class, ready for `build` |
+| `artpipe gen run WORKFLOW [--param NAME VALUE ...]` | Any workflow in `gen/workflows/` on the pinned ComfyUI, with a manifest |
+| `artpipe gen server start\|stop\|status` | The pipeline's ComfyUI server (~15 s start; keep it up for batches) |
+
+### Video ads
+
+| Command | Does |
+|---|---|
+| `artpipe banners setup\|status` | Install / verify pinned ffmpeg, Chromium, Playwright |
+| `artpipe banners kit KIT --template T` | Kit checks: slots, files, licences, colours, images, background |
+| `artpipe banners art hero\|background\|logo KIT ...` | Kit art with provenance: hero cut-out, one generated background, logo |
+| `artpipe banners render KIT --template T [--repair]` | One video + layout record + contact sheet + 17 checks; `--repair` fixes and re-renders |
+| `artpipe banners check FOLDER` | Re-run checks on a rendered video |
+| `artpipe banners batch --template T --games G1,G2` | Game × placement × language, with reuse; summary in `out/banners/batch/` |
+
+### Agent and approvals
+
+| Command | Does |
+|---|---|
+| `artpipe agent setup\|status\|serve\|docs [--check]` | MCP server: install, status, run (Claude Code uses `.mcp.json`), regenerate tool reference |
+| `artpipe queue list\|show\|approve\|reject\|resolve` | The human side of the approval queue |
+
+### Maintenance
+
+| Command | Does |
+|---|---|
+| `artpipe conventions --dump\|--check` | Write / verify `conventions/conventions.lock.json` |
+| `artpipe docs [--check]` | Regenerate doc tables |
+| `artpipe fixtures [DIR]` / `artpipe unity-fixtures` | Build broken test scenes / reference FBX + reports for Unity tests |
+| `artpipe test [-m "..."]` | Test suite: Python, Maya, Unity, ComfyUI, renders |
 
 ## Layout
 
 ```
-conventions/                 the rules and the report contracts (YAML / JSON Schema)
-validate/core/               pure Python: rule loader, lock, report types, FBX + .ma canonicalizers
-validate/maya/               headless Maya: CLI, session, checks/, fixes/, FBX export
-gen/                         generation: core/ (pure: rules, workflows, ComfyUI replies, manifest), comfy.py (server + HTTP), cli.py, workflows/
-banners/                     UA creatives: core/ (pure: rules, template, kit, page, timeline, checks/, repair, batch), render/ (Node + Playwright), templates/, kits/, fonts/, the CLI
-agent/                       the MCP server (server.py), core/ (commands, jobs, queue, reviews, path guard), the job runner, the queue CLI
-pipeline/                    unity.py (batchmode runner, exit-code reconciliation), build.py (end to end)
-unity/                       Unity 6 URP project (Assets/Art is where imported assets go)
+conventions/      rules and report formats (YAML / JSON Schema)
+validate/core/    pure Python, no Maya needed: rules, reports, FBX + .ma canonicalizers
+validate/maya/    headless Maya: checks, fixes, FBX export
+gen/              AI generation: ComfyUI server, workflows, manifests, retry loop
+banners/          video ads: templates, kits, fonts, renderer (Node + Playwright), checks, repair, batch
+agent/            MCP server: jobs, approval queue, review tools, path guard
+pipeline/         Unity batchmode runner, end-to-end build
+unity/            Unity 6 URP demo project (imports land in Assets/Art)
 unity/Packages/com.artpipe.importer/
-  Editor/                    gate, ModelImporter/TextureImporter rules, GPU checks, batchmode CLI
-  Tests/Editor/              EditMode tests + Fixtures~ (golden FBX + reports)
-tests/                       pure-Python tests, integration/ (mayapy), unity_editor/ (real Unity runs), generation/ (real ComfyUI)
-docs/                        architecture.md, conventions.md, unity_import.md, generation.md, banners.md, agent.md, agent_tools.md, backlog.md
+  Editor/         import gate, import rules, GPU checks, batchmode entry
+  Tests/Editor/   Unity tests + reference FBX and reports
+tests/            Python, Maya, real Unity and real ComfyUI tests
+docs/             architecture, conventions, Unity import, generation, banners, agent, backlog
 ```
 
 ## Design choices
 
-- **Built to be called by an agent.** Each stage is a CLI with stable check
-  ids, JSON output, no UI, and one exit-code contract. Messages say what to
-  do next ("move it to Assets/Art/prop_small/ or re-validate with --class
-  pickup"). Exit 1 always means "fix the asset". Crashes, licence problems
-  and a locked project are 2, never 1.
-- **Deterministic end to end.** Same input, same bytes: reports, fixed `.ma`
-  files, exported FBX, `.meta` GUIDs and new prefabs. Reports are diffable
-  and cacheable by hash, and test fixtures can be committed as golden files.
-- **Rules as data, enforced at every boundary.** One YAML source, resolved
-  once by Python into a hash-linked lock that C# reads strictly. A stale lock
-  stops a Unity import. An FBX enters the project only with a passing report
-  for its exact bytes.
-- **Measure what ships.** Vertex budgets are checked after the Unity import,
-  where UV seams and hard edges have already split vertices, and texture
-  formats are checked on the imported result. Both caught real problems
-  that Maya-side checks can't see.
-- **Probe before assuming.** Every Unity and Maya behaviour the design
-  depends on was measured first, and the surprises are written down in the docs.
-- **Proven by tests.** Every check fails on a deliberately broken input, with
-  boundary cases. The suite was mutation-tested by hand: bugs injected on
-  purpose must turn it red.
+- **Agent first.** Stable check ids, JSON output, no UI, one exit-code contract. Messages say what to do next. `1` always means "fix the asset"; crashes, licence problems and a locked project are `2`.
+- **Deterministic.** Same input, same bytes: reports, fixed `.ma`, FBX, `.meta` GUIDs, prefabs. Reports are diffable and cacheable by hash.
+- **Rules as data, enforced at every hand-off.** One YAML source for Python and C#. An FBX enters the game only with a passing report for its exact bytes.
+- **Measure what ships.** Vertex budgets and texture formats are checked after the Unity import. This caught real problems Maya can't see.
+- **Probe before assuming.** Every Maya and Unity behaviour the design relies on was measured first and written up.
+- **Tested tests.** Every check fails on a broken input, with boundary cases. Bugs injected on purpose (mutation testing) must turn the suite red.
 
-Known gaps and deferred work are tracked in [docs/backlog.md](docs/backlog.md).
+## Roadmap
 
+1. **Rules + Maya validator**: done
+2. **Unity import pipeline**: done
+3. **AI generation**: done. Prompt → concept → 3D → Maya → Unity, with retries and provenance
+4. **Video ads at scale**: done. One template, a kit per game, checked against four networks, repaired, batched
+5. **Agent layer**: done. 29 MCP tools, background jobs, GPU queue, persistent Maya worker, approval queue, review tools
+
+Next: **plug & play**. One setup check, other Maya and Unity versions, a
+studio's own projects, and a one-line `artpipe make "a gold coin"`. See
+[docs/backlog.md](docs/backlog.md).
