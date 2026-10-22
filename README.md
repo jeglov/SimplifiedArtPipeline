@@ -5,18 +5,6 @@ headless and returns machine-readable JSON, so an AI agent can do the whole
 loop with no human in it: generate an asset, validate it, fix what is safe
 to fix, and import it into Unity.
 
-> **Status: Phases 1 to 5 complete.** A headless Maya validator with safe
-> auto-fixes, deterministic FBX export, and a Unity 6 import pipeline with an
-> import gate, per-class import rules, GPU budgets and a batchmode CLI (one
-> command takes a messy Maya scene to a clean Unity prefab). An AI generation
-> stage that goes from a prompt to a prefab with provenance (Phase 3). And UA
-> video creatives at scale: one template, a kit per game, rendered, checked
-> against four ad networks' specs and repaired (Phase 4). And an MCP server
-> that lets an agent run all of it, with jobs, a persistent Maya worker, an
-> approval queue for anything that touches the game, and review tools that
-> show the agent's model what the checks can't judge (Phase 5). One-page
-> overview: [docs/architecture.md](docs/architecture.md).
-
 ## What it does today
 
 ```powershell
@@ -219,10 +207,3 @@ docs/                        architecture.md, conventions.md, unity_import.md, g
 
 Known gaps and deferred work are tracked in [docs/backlog.md](docs/backlog.md).
 
-## Roadmap
-
-1. **Conventions + Maya validators**: done
-2. **Unity import pipeline**: done (gate, import rules, GPU budgets, textures, batchmode, end to end)
-3. **AI generation stage**: done. Text to concept image to TRELLIS.2 mesh to Maya to Unity works end to end in one command (`artpipe generate`), with a bounded repair loop and the provenance in the build report
-4. **UA creatives at scale**: done. One template, a kit per game, a 9:16 video checked against four ad networks and repaired, batched with reuse by input hash
-5. **MCP agent layer + docs**: done. 29 MCP tools over the whole pipeline, jobs with a GPU queue, a persistent Maya worker, an approval queue for anything that touches the game, and review tools for the agent's own model
